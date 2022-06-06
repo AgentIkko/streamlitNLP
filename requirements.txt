@@ -142,7 +142,6 @@ pydantic==1.8.2
 pydeck==0.7.1
 PyDispatcher==2.0.5
 Pygments==2.10.0
-PyGObject==3.36.0
 PyHamcrest==1.9.0
 pyinotify==0.9.6
 PyJWT==1.7.1
