@@ -7,7 +7,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-!pip install -U ginza ja-ginza
 HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem">{}</div>"""
 hide_dataframe_row_index = """
             <style>
