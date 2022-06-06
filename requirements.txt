@@ -192,7 +192,6 @@ ssh-import-id==5.10
 streamlit==1.10.0
 SudachiDict-core==20220519
 SudachiPy==0.6.3
-systemd-python==234
 tenacity==8.0.1
 tensorboard==2.9.0
 tensorboard-data-server==0.6.1
