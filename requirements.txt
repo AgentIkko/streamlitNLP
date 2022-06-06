@@ -159,7 +159,6 @@ pytz-deprecation-shim==0.1.0.post0
 PyYAML==5.3.1
 pyzmq==22.3.0
 queuelib==1.5.0
-requests==2.22.0
 requests-oauthlib==1.3.0
 rich==12.4.4
 rsa==4.8
