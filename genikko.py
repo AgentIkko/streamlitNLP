@@ -359,7 +359,7 @@ def semRelExpanderContent(kw,dv,sentlist):
         
         with col2:
             st.markdown(f"""
-                <div style = "background-color: #e0f0d8"> {sortedSimScores[0][0]}</div>
+                <div style = "border-radius:30px 30px 30px 30px;background-color:#e0f0d8;text-align:center;"> {sortedSimScores[0][0]}</div>
                 <div style = "background-color: #e0f0d8"> {sortedSimScores[1][0]}</div>
                 <div style = "background-color: #e0f0d8"> {sortedSimScores[2][0]}</div>
                 <div style = "background-color: #faeaea"> {sortedSimScores[-3][0]}</div>
