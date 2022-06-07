@@ -161,7 +161,7 @@ if optionPhase == "基礎統計":# and task_submitted:
 
     homepageHolder.empty()
     funStaContainer = funStaHolder.container()
-    funStaContainer.markdown("<h1 style='text-align: center; color: royalblue;'>対象原稿の基礎統計量</h1><hr>", unsafe_allow_html=True)
+    funStaContainer.markdown("<h2 style='text-align: start; color: royalblue;'>対象原稿の基礎統計量</h2><hr>", unsafe_allow_html=True)
     # funStaContainer.title("対象原稿の基礎統計量")
 
     dfSponsorStat = pd.read_csv("./data_pandas/kaigo_sponsor_stat.csv")
@@ -229,7 +229,9 @@ if optionPhase == "基礎統計":# and task_submitted:
         col4.metric("原稿名詞数",nounG,np.round(nounG-dfSponsorProMean[6],decimals=1))
         col5.metric("原稿名詞数(異)",nounGdiff,np.round(nounGdiff-dfSponsorProMean[7],decimals=1))
         col6.metric("原稿文数",sentG,np.round(sentG-dfSponsorProMean[8],decimals=1))
-    
+
+    funStaContainer.markdown("<hr>", unsafe_allow_html=True)
+
     ########### 処理part-2    
     def radar_chart(dataRadarChart,categoryRadarChart):
         
@@ -356,14 +358,14 @@ def semRelExpanderContent(kw,dv,sentlist):
             st.metric("偏差値", dv)
         
         with col2:
-            st.write(f"""
-            Top 1: {sortedSimScores[0][0]}\n
-            Top 2: {sortedSimScores[1][0]}\n
-            Top 3: {sortedSimScores[2][0]}\n
-            Bottom 3: {sortedSimScores[-3][0]}\n
-            Bottom 2: {sortedSimScores[-2][0]}\n
-            Bottom 1: {sortedSimScores[-1][0]}\n
-            """)
+            st.markdown(f"""
+                <span style = "background-color: #e0f0d8">{sortedSimScores[0][0]}</span><br>
+                <span style = "background-color: #e0f0d8">{sortedSimScores[1][0]}</span><br>
+                <span style = "background-color: #e0f0d8">{sortedSimScores[2][0]}</span><br>
+                <span style = "background-color: #f0c0c0">{sortedSimScores[-3][0]}</span><br>
+                <span style = "background-color: #f0c0c0">{sortedSimScores[-2][0]}</span><br>
+                <span style = "background-color: #f0c0c0">{sortedSimScores[-1][0]}</span><br>
+                """,unsafe_allow_html=True)
 
 def picklePick(fpath):
     with open(fpath,"rb") as fr:
@@ -374,7 +376,7 @@ def picklePick(fpath):
 if optionPhase == "関連度計算":
     
     homepageHolder.empty()
-    st.markdown("<h1 style='text-align: center; color: royalblue;'>キーワードとの関連度</h1><hr>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: start; color: royalblue;'>キーワードとの関連度</h2>", unsafe_allow_html=True)
     txtTitleSR, txtContentSR = readUploadedFile()
 
     generalKeywords = [
@@ -498,7 +500,7 @@ if optionPhase == "関連度計算":
 if optionPhase == "原稿推薦表現":# and task_submitted:
     homepageHolder.empty()    
     expRecContainer = expRecHolder.container()
-    expRecContainer.markdown("<h1 style='text-align: center; color: royalblue;'>原稿推薦表現</h1><hr>", unsafe_allow_html=True)
+    expRecContainer.markdown("<h2 style='text-align: start; color: royalblue;'>原稿推薦表現</h2>", unsafe_allow_html=True)
     #expRecContainer.title("Expression Recommendation")
 
     ########## load nlped sentences
