@@ -583,7 +583,6 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
         expRecKwList = [e+"の求人" for e in re.split("[,|]",expRecKeywordInputForm) if len(e) > 0]
         expRecSentList = [e for e in re.split('[。|\n]',expRecSentenceInputForm) if len(e) > 0]
         targetExpression = expRecKwList + expRecSentList
-        st.write(targetExpression)
 
         try:
             expRecArti = expRecContentUploaded
@@ -592,9 +591,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
         except NameError:
             st.info("原稿利用なし")
 
-        if targetExpression == ["主婦","介護スタッフ"]:
-
-            st.write("loading")
+        if targetExpression == ["主婦の求人","介護スタッフの求人"]:
 
             import pickle
             with open("kaigoSyufuCalRes.p","rb") as fr:
@@ -603,8 +600,15 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
                 listKaigoStaff = pickle.load(fr)
 
             #for candidate in ["主婦","介護スタッフ"]:
+            with st.expander(label="介護スタッフ"):
+                with st.spinner("Processing..."):
+                    listPresent = sorted(listKaigoStaff,key=lambda x:x[1],reverse=True)
+                    listPresent = [e[0] for e in listPresent if 4 <= len(e[0]) < 26][:21]
+                    rawhtml = '<p style = "margin-bottom: 0.5px"></p>'.join(listPresent)
+                    st.markdown(f"""
+                        <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color:#e0f0d8;">{rawhtml}</div>
+                        """, unsafe_allow_html=True)
             with st.expander(label="主婦"):
-                st.write(listSyufu[:10])
                 with st.spinner("Processing..."):
                     listPresent = sorted(listSyufu,key=lambda x:x[1],reverse=True)
                     listPresent = [e[0] for e in listPresent if 4 <= len(e[0]) < 26][:21]
