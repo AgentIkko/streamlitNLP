@@ -603,7 +603,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
             with st.expander(label="介護スタッフ"):
                 with st.spinner("Processing..."):
                     listPresent = sorted(listKaigoStaff,key=lambda x:x[1],reverse=True)
-                    listPresent = list(set([e[0].strip() for e in listPresent if 4 <= len(e[0]) < 26]))[:21]
+                    listPresent = sorted(set([e[0].strip() for e in listPresent if 4 <= len(e[0]) < 26]),key=listPresent.index)[:21]
                     rawhtml = '</div><div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color:#e0f0d8;"><p style = "margin-bottom: 0.5px"></p>'.join(listPresent)
                     st.markdown(f"""
                         <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color:#e0f0d8;">{rawhtml}</div>
@@ -611,7 +611,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
             with st.expander(label="主婦"):
                 with st.spinner("Processing..."):
                     listPresent = sorted(listSyufu,key=lambda x:x[1],reverse=True)
-                    listPresent = list(set([e[0].strip() for e in listPresent if 4 <= len(e[0]) < 26]))[:21]
+                    listPresent = sorted(set([e[0].strip() for e in listPresent if 4 <= len(e[0]) < 26]),key=listPresent.index)[:21]
                     rawhtml = '</div><div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color:#e0f0d8;"><p style = "margin-bottom: 0.5px"></p>'.join(listPresent)
                     st.markdown(f"""
                         <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color:#e0f0d8;">{rawhtml}</div>
