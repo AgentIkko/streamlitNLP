@@ -363,17 +363,17 @@ def semRelExpanderContent(kw,dv,sentlist):
         
         with col2:
             st.markdown(f"""
-                <div style = "border-radius:5px 5px 5px 5px;text-align:start;background-color:#e0f0d8;"> {sortedSimScores[0][0]}</div>
+                <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color:#e0f0d8;"> {sortedSimScores[0][0]}</div>
+                <p style = "margin-bottom: 0.5px"><p>
+                <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color: #e0f0d8"> {sortedSimScores[1][0]}</div>
+                <p style = "margin-bottom: 0.5px"><p>
+                <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color: #e0f0d8"> {sortedSimScores[2][0]}</div>
                 <p style = "margin-bottom: 1px"><p>
-                <div style = "border-radius:5px 5px 5px 5px;text-align:start;background-color: #e0f0d8"> {sortedSimScores[1][0]}</div>
-                <p style = "margin-bottom: 1px"><p>
-                <div style = "border-radius:5px 5px 5px 5px;text-align:start;background-color: #e0f0d8"> {sortedSimScores[2][0]}</div>
-                <p style = "margin-bottom: 1px"><p>
-                <div style = "border-radius:5px 5px 5px 5px;text-align:start;background-color: #faeaea"> {sortedSimScores[-3][0]}</div>
-                <p style = "margin-bottom: 1px"><p>
-                <div style = "border-radius:5px 5px 5px 5px;text-align:start;background-color: #faeaea"> {sortedSimScores[-2][0]}</div>
-                <p style = "margin-bottom: 1px"><p>
-                <div style = "border-radius:5px 5px 5px 5px;text-align:start;background-color: #faeaea"> {sortedSimScores[-1][0]}</div>
+                <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color: #faeaea"> {sortedSimScores[-3][0]}</div>
+                <p style = "margin-bottom: 0.5px"><p>
+                <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color: #faeaea"> {sortedSimScores[-2][0]}</div>
+                <p style = "margin-bottom: 0.5px"><p>
+                <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color: #faeaea"> {sortedSimScores[-1][0]}</div>
                 """,unsafe_allow_html=True)
 
 def picklePick(fpath):
@@ -591,18 +591,34 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
         except NameError:
             st.info("原稿利用なし")
 
-        for candidate in targetExpression:
-            nlpedCandidate = nlp(candidate)
-            with st.expander(label=candidate.replace('の求人','')):
+        if targetExpression == ["主婦","介護スタッフ"]:
+            import pickle
+            listSyufu = pickle.load("kaigoSyufuCalRes.p")
+            listKaigoStaff = pickle.load("kaigoStaffCalRes.p")
+            #for candidate in ["主婦","介護スタッフ"]:
+            with st.expander(label="主婦"):
                 with st.spinner("Processing..."):
-                    voidlist = []
-                    for nlpedpp in kaigoSents[:10000]:
-                        simscore = nlpedCandidate.similarity(nlp(nlpedpp))
-                        voidlist.append((nlpedpp,simscore))
-                    listPresent = sorted(voidlist,key=lambda x:x[1],reverse=True)#reverse=True)
-                    listPresent = [e[0] for e in listPresent if 4 < len(e[0]) < 26][:21]
-                    for s in listPresent:
-                        st.write(s)
+                    listPresent = sorted(listSyufu,key=lambda x:x[1],reverse=True)
+                    listPresent = [e[0] for e in listPresent if 4 <= len(e[0]) < 26][:21]
+                    rawhtml = '<p style = "margin-bottom: 0.5px"></p>'.join(listPresent)
+                    st.markdown(f"""
+                        <div style = "border-radius:4px 4px 4px 4px;text-align:start;background-color:#e0f0d8;">{rawhtml}</div>
+                        """, unsafe_allow_html=True)
+
+
+        else:    
+            for candidate in targetExpression:
+                nlpedCandidate = nlp(candidate)
+                with st.expander(label=candidate.replace('の求人','')):
+                    with st.spinner("Processing..."):
+                        voidlist = []
+                        for nlpedpp in kaigoSents[:3000]:
+                            simscore = nlpedCandidate.similarity(nlp(nlpedpp))
+                            voidlist.append((nlpedpp,simscore))
+                        listPresent = sorted(voidlist,key=lambda x:x[1],reverse=True)
+                        listPresent = [e[0] for e in listPresent if 4 < len(e[0]) < 26][:21]
+                        for s in listPresent:
+                            st.write(s)
     
     else:
         st.info("""
