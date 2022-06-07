@@ -366,6 +366,7 @@ def semRelExpanderContent(kw,dv,sentlist):
                 <tr style = "background-color: #f0c0c0">{sortedSimScores[-3][0]}</tr>
                 <tr style = "background-color: #f0c0c0">{sortedSimScores[-2][0]}</tr>
                 <tr style = "background-color: #f0c0c0">{sortedSimScores[-1][0]}</tr>
+                </table>
                 """,unsafe_allow_html=True)
 
 def picklePick(fpath):
