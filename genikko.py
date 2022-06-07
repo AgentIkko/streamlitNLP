@@ -598,6 +598,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
             #for candidate in ["主婦","介護スタッフ"]:
             with st.expander(label="主婦"):
                 with st.spinner("Processing..."):
+                    st.write(listSyufu[:10])
                     listPresent = sorted(listSyufu,key=lambda x:x[1],reverse=True)
                     listPresent = [e[0] for e in listPresent if 4 <= len(e[0]) < 26][:21]
                     rawhtml = '<p style = "margin-bottom: 0.5px"></p>'.join(listPresent)
