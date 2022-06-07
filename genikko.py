@@ -583,6 +583,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
         expRecKwList = [e+"の求人" for e in re.split("[,|]",expRecKeywordInputForm) if len(e) > 0]
         expRecSentList = [e for e in re.split('[。|\n]',expRecSentenceInputForm) if len(e) > 0]
         targetExpression = expRecKwList + expRecSentList
+        st.write(targetExpression)
 
         try:
             expRecArti = expRecContentUploaded
