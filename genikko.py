@@ -170,30 +170,24 @@ if optionPhase == "基礎統計":# and task_submitted:
     dfSponsorProStat = pd.read_csv("./data_pandas/kaigo_sponsorPro_stat.csv")
     dfSponsorProMean = dfSponsorProStat.mean().tolist()[1:]
     dfSponsorProMeanRecord = ["x","x"] + dfSponsorProMean[:-3] + multiAddDiv(dfSponsorProStat)
-
-    import MeCab
-    wakati = MeCab.Tagger(r'-Owakati')
-    chasen = MeCab.Tagger(r'-Ochasen')
     
     import plotly.express as px
     import plotly.graph_objects as go
 
     #@st.cache
     def forSentence(s):
-        s = s.strip()
-        sWakati = wakati.parse(s).strip().split()
-        sChasen = chasen.parse(s)
-        sNoun = [line.split()[0] for line in sChasen.splitlines() if len(line.strip()) > 0 and line.split()[-1].startswith("名詞")]
+        s = nlp(s.strip())
+        sWakati = [token for token in s if not token.tag_.startswith("補助記号")]
+        sNoun = [token for token in s if token.tag_.startswith("名詞")]
         return [len(s),len(sWakati),len(sNoun)]
 
     #@st.cache
     def forDescrption(des):
         des = des.strip()
         sentlist = [sent for sent in des.split("\n") if len(sent) > 0]
-        desWakati = wakati.parse(des).strip().split()
-        desChasen = chasen.parse(des)
-        desNoun = [line.split()[0] for line in desChasen.splitlines() if len(line.strip()) > 0 and line.split()[-1].startswith("名詞")]
-        
+        desNLP = nlp(des)
+        desWakati = [token for token in desNLP if not token.tag_.startswith("補助記号")]
+        desNoun = [token for token in desNLP if token.tag_.startswith("名詞")]
         resultsA = [len(des),len(desWakati),len(set(desWakati)),len(desNoun),len(set(desNoun)),len(sentlist),]
         resultsASent = []
         

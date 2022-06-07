@@ -1,3 +1,4 @@
 *.pkl
 *.png
-.ipynb_checkpoint/
+.ipynb_checkpoints/
+data_pandas/.ipynb_checkpoints/
