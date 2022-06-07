@@ -179,8 +179,8 @@ if optionPhase == "基礎統計":# and task_submitted:
     def forSentence(s):
         s = s.strip()
         sNLP = nlp(s)
-        sWakati = [token for token in sNLP if not token.tag_.startswith("補助記号")]
-        sNoun = [token for token in sNLP if token.tag_.startswith("名詞")]
+        sWakati = [token.text for token in sNLP if not token.tag_.startswith("補助記号")]
+        sNoun = [token.text for token in sNLP if token.tag_.startswith("名詞")]
         return [len(s),len(sWakati),len(sNoun)]
 
     #@st.cache
@@ -188,8 +188,8 @@ if optionPhase == "基礎統計":# and task_submitted:
         des = des.strip()
         sentlist = [sent for sent in des.split("\n") if len(sent) > 0]
         desNLP = nlp(des)
-        desWakati = [token for token in desNLP if not token.tag_.startswith("補助記号")]
-        desNoun = [token for token in desNLP if token.tag_.startswith("名詞")]
+        desWakati = [token.text for token in desNLP if not token.tag_.startswith("補助記号")]
+        desNoun = [token.text for token in desNLP if token.tag_.startswith("名詞")]
         resultsA = [len(des),len(desWakati),len(set(desWakati)),len(desNoun),len(set(desNoun)),len(sentlist),]
         resultsASent = []
         
@@ -349,7 +349,7 @@ def semRelExpanderContent(kw,dv,sentlist):
         with st.spinner("計算中..."):
             for s in sentlist:
                 sNLP = nlp(s)
-                sNew = "".join([token for token in sNLP if not token.tag_.startswith("補助記号")])
+                sNew = "".join([token.text for token in sNLP if not token.tag_.startswith("補助記号")])
                 if len(sNew) > 0:
                     simScore = nlpedKW.similarity(nlp(sNew))
                     simScores.append((sNew,simScore))
