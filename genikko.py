@@ -359,12 +359,13 @@ def semRelExpanderContent(kw,dv,sentlist):
         
         with col2:
             st.markdown(f"""
-                <span style = "background-color: #e0f0d8">{sortedSimScores[0][0]}</span><br>
-                <span style = "background-color: #e0f0d8">{sortedSimScores[1][0]}</span><br>
-                <span style = "background-color: #e0f0d8">{sortedSimScores[2][0]}</span><br>
-                <span style = "background-color: #f0c0c0">{sortedSimScores[-3][0]}</span><br>
-                <span style = "background-color: #f0c0c0">{sortedSimScores[-2][0]}</span><br>
-                <span style = "background-color: #f0c0c0">{sortedSimScores[-1][0]}</span><br>
+                <table class="output">
+                <tr style = "background-color: #e0f0d8">{sortedSimScores[0][0]}</tr>
+                <tr style = "background-color: #e0f0d8">{sortedSimScores[1][0]}</tr>
+                <tr style = "background-color: #e0f0d8">{sortedSimScores[2][0]}</tr>
+                <tr style = "background-color: #f0c0c0">{sortedSimScores[-3][0]}</tr>
+                <tr style = "background-color: #f0c0c0">{sortedSimScores[-2][0]}</tr>
+                <tr style = "background-color: #f0c0c0">{sortedSimScores[-1][0]}</tr>
                 """,unsafe_allow_html=True)
 
 def picklePick(fpath):
