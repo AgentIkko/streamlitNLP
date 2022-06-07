@@ -592,9 +592,13 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
             st.info("原稿利用なし")
 
         if targetExpression == ["主婦","介護スタッフ"]:
+            
             import pickle
-            listSyufu = pickle.load("kaigoSyufuCalRes.p")
-            listKaigoStaff = pickle.load("kaigoStaffCalRes.p")
+            with open("kaigoSyufuCalRes.p","rb") as fr:
+                listSyufu = pickle.load(fr)
+            with open("kaigoStaffCalRes.p","rb") as fr:
+                listKaigoStaff = pickle.load(fr)
+
             #for candidate in ["主婦","介護スタッフ"]:
             with st.expander(label="主婦"):
                 with st.spinner("Processing..."):
