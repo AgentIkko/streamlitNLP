@@ -161,7 +161,8 @@ if optionPhase == "基礎統計":# and task_submitted:
 
     homepageHolder.empty()
     funStaContainer = funStaHolder.container()
-    funStaContainer.title("Fundamental Statistics")
+    funStaContainer.markdown("<h1 style='text-align: center; color: royalblue;'>対象原稿の基礎統計量</h1><hr>", unsafe_allow_html=True)
+    # funStaContainer.title("対象原稿の基礎統計量")
 
     dfSponsorStat = pd.read_csv("./data_pandas/kaigo_sponsor_stat.csv")
     dfSponsorMean = dfSponsorStat.mean().tolist()[1:]
@@ -284,7 +285,7 @@ if optionPhase == "基礎統計":# and task_submitted:
        
     # title part
     with funStaContainer:
-        st.markdown("<h3 style='text-align: center; color: royalblue;'>文単位解析</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center; color: black;'>文単位解析</h3>", unsafe_allow_html=True)
         
         # colTitleRadarChart,colTitleTable = st.columns([5,2])
         # with colTitleRadarChart:
@@ -301,7 +302,7 @@ if optionPhase == "基礎統計":# and task_submitted:
     
     # body part
     with funStaContainer:
-        st.markdown("<h3 style='text-align: center; color: royalblue;'>原稿単位解析</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center; color: black;'>原稿単位解析</h3>", unsafe_allow_html=True)
         
         # colBodyRadarChart,colBodyTable = st.columns(2)
         # with colBodyRadarChart:
@@ -373,7 +374,7 @@ def picklePick(fpath):
 if optionPhase == "関連度計算":
     
     homepageHolder.empty()
-    st.title("Semantic Relevance")
+    st.markdown("<h1 style='text-align: center; color: royalblue;'>キーワードとの関連度</h1><hr>", unsafe_allow_html=True)
     txtTitleSR, txtContentSR = readUploadedFile()
 
     generalKeywords = [
@@ -446,7 +447,6 @@ if optionPhase == "関連度計算":
             dictOfSimScores.update({"職種":[]})
 
             ########## 関連度計算
-            nlp = spacy.load("ja_ginza")
             simScore4singleGenkou(dictOfSimScores,candidateKeyWord,"TARGET",txtContentSR)
             st.success("対象原稿計算終了")
 
@@ -462,11 +462,12 @@ if optionPhase == "関連度計算":
                 simScore4singleGenkou(dictOfSimScores,candidateKeyWord,t,c)
                 status_text.text(f"職種：{t[:25]}...\t Progress: {round(i/loopCount*100,2)}%")
                 loadBarSR.progress(int(i/loopCount*100+1))
-                #test = pd.DataFrame.from_dict(dictOfSimScores)
+
+            existedRelData = pd.DataFrame.from_dict(dictOfSimScores)
             st.success("DONE")
  
     ########## 出力フォーマット
-    with st.spinner("処理完了。出力中..."):
+    with st.spinner("解析完了。出力中..."):
 
         # st.write("めちゃめちゃ正規分布してるので、偏差値出してみました。")
 
@@ -475,21 +476,20 @@ if optionPhase == "関連度計算":
 
         genkouSentList = [e.strip() for e in txtContentSR.split("\n") if len(e) > 0]
 
-        #try:
-        for kw in candidateKeyWord:
-            sss = existedRelData[kw].rank(pct=True).tolist()[0]
-            sssDV = getDeviationValue(existedRelData,kw)[0]
-            semRelExpanderContent(kw,sssDV,genkouSentList)
+        try:
+            for kw in candidateKeyWord:
+                sss = existedRelData[kw].rank(pct=True).tolist()[0]
+                sssDV = getDeviationValue(existedRelData,kw)[0]
+                semRelExpanderContent(kw,sssDV,genkouSentList)
                 #st.write(kw,": 順位 ",round(sss*100,2),"%; 偏差値 ",sssDV)
                 #fig = plt.figure()
                 #ax = fig.add_subplot()
                 #ax.hist(existedRelData[kw],bins=100)
                 #st.pyplot(fig)
-        #except NameError:
-        #    st.info("""
-        #        まずはキーワードを選択してください。\n
-        #        Select your keyword(s) please.
-        #        """)
+        except NameError:
+            st.info("""
+                まずはキーワードを選択してください。\n
+                """)
 
         #st.write(dictOfSimScores)
 
@@ -498,7 +498,8 @@ if optionPhase == "関連度計算":
 if optionPhase == "原稿推薦表現":# and task_submitted:
     homepageHolder.empty()    
     expRecContainer = expRecHolder.container()
-    expRecContainer.title("Expression Recommendation")
+    expRecContainer.markdown("<h1 style='text-align: center; color: royalblue;'>原稿推薦表現</h1><hr>", unsafe_allow_html=True)
+    #expRecContainer.title("Expression Recommendation")
 
     ########## load nlped sentences
     #@st.experimental_singleton
@@ -539,8 +540,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
 
     with expRecContainer.form("expRecInput"):
         st.info("""
-            以下の入力に対する推薦表現が得られる。\n
-            Recommended expression will be obtained by filling in the following field(s).
+            以下の入力に対する推薦表現が得られる。
             """)
         # keywords
         expRecKeywordInputForm = st.text_input(
