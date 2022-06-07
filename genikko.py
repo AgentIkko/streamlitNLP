@@ -176,9 +176,10 @@ if optionPhase == "基礎統計":# and task_submitted:
 
     #@st.cache
     def forSentence(s):
-        s = nlp(s.strip())
-        sWakati = [token for token in s if not token.tag_.startswith("補助記号")]
-        sNoun = [token for token in s if token.tag_.startswith("名詞")]
+        s = s.strip()
+        sNLP = nlp(s)
+        sWakati = [token for token in sNLP if not token.tag_.startswith("補助記号")]
+        sNoun = [token for token in sNLP if token.tag_.startswith("名詞")]
         return [len(s),len(sWakati),len(sNoun)]
 
     #@st.cache
