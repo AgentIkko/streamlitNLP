@@ -348,8 +348,11 @@ def semRelExpanderContent(kw,dv,sentlist):
 
         with st.spinner("計算中..."):
             for s in sentlist:
-                simScore = nlpedKW.similarity(nlp(s))
-                simScores.append((s,simScore))
+                sNLP = nlp(s)
+                sNew = "".join([token for token in sNLP if not token.tag_.startswith("補助記号")])
+                if len(sNew) > 0:
+                    simScore = nlpedKW.similarity(nlp(sNew))
+                    simScores.append((sNew,simScore))
             sortedSimScores = sorted(simScores,key=lambda x: x[1], reverse=True)
 
         col1,col2 = st.columns([1,3])
@@ -359,13 +362,17 @@ def semRelExpanderContent(kw,dv,sentlist):
         
         with col2:
             st.markdown(f"""
-                <div style = "border-radius:10px 10px 10px 10px;text-align:center;background-color:#e0f0d8;"> {sortedSimScores[0][0]}</div>
-                <p style = "margin-bottom: 4px"><p>
-                <div style = "border-radius:10px 10px 10px 10px;text-align:center;background-color: #e0f0d8"> {sortedSimScores[1][0]}</div>
-                <div style = "border-radius:10px 10px 10px 10px;text-align:center;background-color: #e0f0d8"> {sortedSimScores[2][0]}</div>
-                <div style = "border-radius:10px 10px 10px 10px;text-align:center;background-color: #faeaea"> {sortedSimScores[-3][0]}</div>
-                <div style = "border-radius:10px 10px 10px 10px;text-align:center;background-color: #faeaea"> {sortedSimScores[-2][0]}</div>
-                <div style = "border-radius:10px 10px 10px 10px;text-align:center;background-color: #faeaea"> {sortedSimScores[-1][0]}</div>
+                <div style = "border-radius:5px 5px 5px 5px;text-align:center;background-color:#e0f0d8;"> {sortedSimScores[0][0]}</div>
+                <p style = "margin-bottom: 1px"><p>
+                <div style = "border-radius:5px 5px 5px 5px;text-align:center;background-color: #e0f0d8"> {sortedSimScores[1][0]}</div>
+                <p style = "margin-bottom: 1px"><p>
+                <div style = "border-radius:5px 5px 5px 5px;text-align:center;background-color: #e0f0d8"> {sortedSimScores[2][0]}</div>
+                <p style = "margin-bottom: 1px"><p>
+                <div style = "border-radius:5px 5px 5px 5px;text-align:center;background-color: #faeaea"> {sortedSimScores[-3][0]}</div>
+                <p style = "margin-bottom: 1px"><p>
+                <div style = "border-radius:5px 5px 5px 5px;text-align:center;background-color: #faeaea"> {sortedSimScores[-2][0]}</div>
+                <p style = "margin-bottom: 1px"><p>
+                <div style = "border-radius:5px 5px 5px 5px;text-align:center;background-color: #faeaea"> {sortedSimScores[-1][0]}</div>
                 """,unsafe_allow_html=True)
 
 def picklePick(fpath):
