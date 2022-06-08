@@ -7,7 +7,24 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+#################### html wrapper & page config
 HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem">{}</div>"""
+str_block_css = f"""
+    <style>
+        span.strblock{{
+            padding         :   8px;
+            border          :   2px solid #666666;
+            border-radius   :   10px;
+            background      :   deepskyblue;
+            /*font-weight     :   bold;*/
+        }}
+        sub.pagetitle{{
+            font-size       :   50%;
+            /*vertical-align  :   sub;*/
+            font-variant    :   small-caps;
+        }}
+    </style>
+    """ 
 hide_dataframe_row_index = """
             <style>
             .row_heading.level0 {display:none}
@@ -22,14 +39,14 @@ hide_streamlit_style = """
 nlp = spacy.load("ja_ginza")
 # streamlit では """ が効かない
 st.set_page_config(
-    page_title="原稿解析システム_DEMO",
-    #page_icon=":smiley_cat:",
+    page_title="原稿解析 AIRCreW",
     page_icon="./favicon.ico",
     layout="centered",
     initial_sidebar_state="auto",
     )
 
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
+
 #################### button status
 @st.cache(allow_output_mutation=True)
 def button_states():
@@ -42,7 +59,7 @@ def session_change():
     if "isPressedSR" in st.session_state:
         st.session_state["isPressedSR"].update({"pressed":None})
     
-#################### sidebar
+#################### sidebarImage
 st.sidebar.image("./VQlogo.png")
 st.sidebar.image(image="./AIRCreW_logo.PNG",width=300)
 
@@ -75,15 +92,12 @@ if infoPages == "HOME":
     homepageHolder.empty()
 
 #################### side bar
-# STEP 1
-# 1. indeed 仕事 uid 入力 jobUrlInputForm
-# 2. 買ってきた json ファイル入力 | pending
-# 3. indeed 一括入稿フォーマットでの入力 | pending
-st.sidebar.markdown('<h4 style="text-align: center">STEP 1: アップロード方式を選択</h4>',unsafe_allow_html=True)
+st.sidebar.markdown('<h4 style="text-align: center">ファイルをアップロード</h4>',unsafe_allow_html=True)
+
+########## file upload
 with st.sidebar.form("uploaderSingleFile",clear_on_submit=False):
 
     ## 1. from uploaded files
-
     fileUploaderForm = st.file_uploader(label="① 原稿テキストファイル")
     submitted = st.form_submit_button("アップロード")
 
@@ -92,33 +106,43 @@ with st.sidebar.form("uploaderSingleFile",clear_on_submit=False):
 
     ## 2. from indeed urls
     
-    jobUrlInputForm = st.text_input(label="② uidを入力",value="",max_chars=50,)
-    url_submitted = st.form_submit_button("案件URL獲得")
+    # jobUrlInputForm = st.text_input(label="② uidを入力",value="",max_chars=50,)
+    # url_submitted = st.form_submit_button("案件URL獲得")
 
-    if jobUrlInputForm and url_submitted is not None:
-        jobUrl = "https://jp.indeed.com/%E4%BB%95%E4%BA%8B?jk=" + jobUrlInputForm
-        st.markdown("[indeed URL]("+jobUrl+")",unsafe_allow_html=True)    
+    # if jobUrlInputForm and url_submitted is not None:
+    #    jobUrl = "https://jp.indeed.com/%E4%BB%95%E4%BA%8B?jk=" + jobUrlInputForm
+    #    st.markdown("[indeed URL]("+jobUrl+")",unsafe_allow_html=True)    
 
 
-# STEP 2
-st.sidebar.markdown('<h4 style="text-align: center">STEP 2: 解析モデルと業種を選択</h4>',unsafe_allow_html=True)
-with st.sidebar.form("modelGyosyu",clear_on_submit=False):
+########## 業種選択
+# st.sidebar.markdown('<h4 style="text-align: center">業種を選択</h4>',unsafe_allow_html=True)
+# with st.sidebar.form("modelGyosyu",clear_on_submit=False):
     # model select
-    optionModel = st.selectbox(label="利用可能モデル", options=("W2V","RNN","GenIkko",))
-    optionGyosyu = st.selectbox(label="業種", options=("介護","物流","販売"))
-    mg_submitted = st.form_submit_button("確定")
-    st.session_state["isPressedModel"] = button_states()
+    # optionModel = st.selectbox(label="利用可能モデル", options=("W2V","RNN","GenIkko",))
+optionGyosyu = st.sidebar.selectbox(label="STEP 1: 業種選択", options=("-","介護","物流","販売"))
+st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
+st.sidebar.markdown(f"""
+    <p style="text-align: center">現在の業種：<span class="strblock">{optionGyosyu}</span></p>
+    """, unsafe_allow_html=True,
+    )
+    # mg_submitted = st.form_submit_button("確定")
+    # st.session_state["isPressedModel"] = button_states()
 
-    if mg_submitted:
-        st.session_state["isPressedModel"].update({"pressed":True})
-        st.write("モデルをロードしました。")
+    # if mg_submitted:
+    #    st.session_state["isPressedModel"].update({"pressed":True})
+    #     st.write("モデルをロードしました。")
     
 
-# STEP 3
-st.sidebar.markdown('<h4 style="text-align: center">STEP 3: 解析タスクを選択</h4>',unsafe_allow_html=True)
+########## タスク選択
+#st.sidebar.markdown('<h4 style="text-align: center">解析タスクを選択</h4>',unsafe_allow_html=True)
 # with st.sidebar.form("taskSelect",clear_on_submit=False):
-optionPhase = st.sidebar.selectbox(label="処理タスク",options=("-","基礎統計","関連度計算","原稿推薦表現"))
-st.sidebar.write("現在のタスク：", optionPhase)
+optionPhase = st.sidebar.selectbox(label="STEP 2: タスク選択",options=("-","基礎統計","関連度計算","原稿推薦表現"))
+st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
+st.sidebar.markdown(f"""
+    <p style="text-align: center">現在のタスク：<span class="strblock">{optionPhase}</span></p>
+    """, unsafe_allow_html=True,
+    )
+#st.sidebar.write("現在のタスク：", optionPhase)
 #task_submitted = st.form_submit_button("解析開始")
 #    st.session_state["isPressedTask"] = button_states()
 #    if task_submitted:
@@ -161,7 +185,10 @@ if optionPhase == "基礎統計":# and task_submitted:
 
     homepageHolder.empty()
     funStaContainer = funStaHolder.container()
-    funStaContainer.title("Fundamental Statistics")
+    funStaContainer.markdown(str_block_css,unsafe_allow_html=True)
+    funStaContainer.markdown("""
+        <h1 style="text-align:start;"> 基礎<font color="deepskyblue">統計</font>量<sub class="pagetitle">&nbsp;Fundamental Statistics</sub></h1>
+        """,unsafe_allow_html=True)
 
     funStaContainer.write("HELLO")
 
@@ -180,7 +207,11 @@ def getDeviationValue(df,colName):
 if optionPhase == "関連度計算":
     
     homepageHolder.empty()
-    st.title("Semantic Relevance")
+    semRelContainer = semRelHolder.container()
+    semRelContainer.markdown(str_block_css,unsafe_allow_html=True)
+    semRelContainer.markdown("""
+        <h1 style="text-align:start;"> キーワード<font color="deepskyblue">関連</font>度<sub class="pagetitle">&nbsp;Semantic Similarity</sub></h1>
+        """,unsafe_allow_html=True)
     txtTitleSR, txtContentSR = readUploadedFile()
 
     generalKeywords = [
@@ -202,21 +233,23 @@ if optionPhase == "関連度計算":
             ],
         "営業":[
             "営業","不動産",
-            ]
+            ],
         }
 
     for kw in gyosyuKeywordDict.keys():
         if optionGyosyu == kw:
             selectedGyosyu = gyosyuKeywordDict[kw]
+        elif optionGyosyu == "-":
+            selectedGyosyu = generalKeywords[:5]
 
-    optionKeywords = generalKeywords + selectedGyosyu
+    optionKeywords = list(set(generalKeywords + selectedGyosyu))
 
     ########## 関連度を調べたいキーワードの選択と自由入力
     with st.form("keywordselect"):
         keyWordSelectForm = st.multiselect(
             label="キーワード",
             options=optionKeywords,
-            default=generalKeywords[:5] + selectedGyosyu[:5],
+            default=list(set(generalKeywords[:3] + selectedGyosyu[:3])),
             help="*From Indeed Keyword Ranking.",
             )
         additionalKeyWordInputForm = st.text_input(
@@ -253,7 +286,10 @@ if optionPhase == "関連度計算":
 if optionPhase == "原稿推薦表現":# and task_submitted:
     homepageHolder.empty()    
     expRecContainer = expRecHolder.container()
-    expRecContainer.title("Expression Recommendation")
+    expRecContainer.markdown(str_block_css,unsafe_allow_html=True)
+    expRecContainer.markdown("""
+        <h1 style="text-align:start;"> 原稿<font color="deepskyblue">推薦</font>表現<sub class="pagetitle">&nbsp;Recommended Expression</sub></h1>
+        """,unsafe_allow_html=True)
 
     ########## load nlped sentences
     #@st.experimental_singleton
