@@ -1,27 +1,40 @@
 from io import StringIO
 from PIL import Image
 from collections import Counter
-import re, os, glob, copy, random, pickle, itertools
+import re, os, glob, copy, random, pickle, itertools,json
 import ginza, spacy
 import streamlit as st
 import pandas as pd
 import numpy as np
+import boto3
+from boto3.session import Session
 
 #################### html wrapper & page config
+session = Session(profile_name="genikko-profile")
+client = session.client("sagemaker-runtime",region_name="ap-northeast-1")
 HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem">{}</div>"""
 str_block_css = f"""
     <style>
         span.strblock{{
             padding         :   8px;
-            border          :   2px solid #666666;
+            /*border          :   2px solid #666666;*/
             border-radius   :   10px;
             background      :   deepskyblue;
-            /*font-weight     :   bold;*/
+            font-weight     :   bold;
+        }}
+        div.parblock{{
+            padding         :   8px;
+            /*border          :   1px solid lightskyblue;*/
+            border-radius   :   10px;
+            background      :   #f3f4f7;
         }}
         sub.pagetitle{{
             font-size       :   50%;
             /*vertical-align  :   sub;*/
             font-variant    :   small-caps;
+        }}
+        span[data-baseweb="tag"]{{
+            background-color:   deepskyblue;
         }}
     </style>
     """ 
@@ -70,11 +83,13 @@ aboutusHolder = st.empty()
 funStaHolder = st.empty()
 semRelHolder = st.empty()
 expRecHolder = st.empty()
+jobGenHolder =st.empty()
 
 infoPages = st.sidebar.radio("",options=(["HOME","ABOUT US"]))
 
 if infoPages == "ABOUT US":
     funStaHolder.empty()
+    st.legacy_caching.clear_cache()
     homepageHolder.container()
 
     with homepageHolder.container():
@@ -104,59 +119,35 @@ with st.sidebar.form("uploaderSingleFile",clear_on_submit=False):
     if fileUploaderForm and submitted is not None:
         st.write("ファイルをアップロードしました。")
 
-    ## 2. from indeed urls
-    
-    # jobUrlInputForm = st.text_input(label="② uidを入力",value="",max_chars=50,)
-    # url_submitted = st.form_submit_button("案件URL獲得")
-
-    # if jobUrlInputForm and url_submitted is not None:
-    #    jobUrl = "https://jp.indeed.com/%E4%BB%95%E4%BA%8B?jk=" + jobUrlInputForm
-    #    st.markdown("[indeed URL]("+jobUrl+")",unsafe_allow_html=True)    
-
 
 ########## 業種選択
-# st.sidebar.markdown('<h4 style="text-align: center">業種を選択</h4>',unsafe_allow_html=True)
-# with st.sidebar.form("modelGyosyu",clear_on_submit=False):
-    # model select
-    # optionModel = st.selectbox(label="利用可能モデル", options=("W2V","RNN","GenIkko",))
 optionGyosyu = st.sidebar.selectbox(label="STEP 1: 業種選択", options=("-","介護","物流","販売"))
 st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
 st.sidebar.markdown(f"""
-    <p style="text-align: center">現在の業種：<span class="strblock">{optionGyosyu}</span></p>
+    <p style="text-align: center">現在の業種：<span class="strblock"><font color="white">{optionGyosyu}</font></span></p>
     """, unsafe_allow_html=True,
     )
-    # mg_submitted = st.form_submit_button("確定")
-    # st.session_state["isPressedModel"] = button_states()
-
-    # if mg_submitted:
-    #    st.session_state["isPressedModel"].update({"pressed":True})
-    #     st.write("モデルをロードしました。")
     
 
 ########## タスク選択
-#st.sidebar.markdown('<h4 style="text-align: center">解析タスクを選択</h4>',unsafe_allow_html=True)
-# with st.sidebar.form("taskSelect",clear_on_submit=False):
-optionPhase = st.sidebar.selectbox(label="STEP 2: タスク選択",options=("-","基礎統計","関連度計算","原稿推薦表現"))
+optionPhase = st.sidebar.selectbox(label="STEP 2: タスク選択",options=("-","基礎統計","関連度計算","原稿推薦表現","原稿生成β"))
 st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
 st.sidebar.markdown(f"""
-    <p style="text-align: center">現在のタスク：<span class="strblock">{optionPhase}</span></p>
+    <p style="text-align: center">現在のタスク：<span class="strblock"><font color="white">{optionPhase}</font></span></p>
     """, unsafe_allow_html=True,
     )
-#st.sidebar.write("現在のタスク：", optionPhase)
-#task_submitted = st.form_submit_button("解析開始")
-#    st.session_state["isPressedTask"] = button_states()
-#    if task_submitted:
-#        st.session_state["isPressedTask"]["pressed"] = True
-   
+
+########## info expander
 with st.sidebar.expander("このアプリについて"):
     st.write("""
         AI(人工知能)のチカラを使ってindeed原稿を解析・改善する独自ツールを展開しています。
         原稿の比較検証等を可視化することで、改善ポイントを明確にして最適なindeed原稿へと導くことが可能です。
     """)
-    
+
+########## copyright
 st.sidebar.markdown('<span style="font-size:12px;text-align: center"><b>Copyright ©2022 株式会社一広バリュークエスト</b></span>',unsafe_allow_html=True)
 
-#################### functions-fs
+#################### FSセクション用関数
 def multiAddDiv(df):
     result1 = sum(df["原稿文数"]*df["文平均字数"])/sum(df["原稿文数"])
     result2 = sum(df["原稿文数"]*df["文平均語数"])/sum(df["原稿文数"])
@@ -180,19 +171,41 @@ def readUploadedFile():
 
     return genkouTitle, genkouContent
 
-#################### FS
-if optionPhase == "基礎統計":# and task_submitted:
+@st.cache
+def readDF(pathDF):
 
-    homepageHolder.empty()
-    funStaContainer = funStaHolder.container()
-    funStaContainer.markdown(str_block_css,unsafe_allow_html=True)
-    funStaContainer.markdown("""
-        <h1 style="text-align:start;"> 基礎<font color="deepskyblue">統計</font>量<sub class="pagetitle">&nbsp;Fundamental Statistics</sub></h1>
-        """,unsafe_allow_html=True)
+    dfStat = pd.read_csv(pathDF)
+    dfStatMean = dfStat.mean().tolist()[1:]
+    dfStatMean4Rec = ["x","x"] + dfStatMean[:-3] + multiAddDiv(dfStat)
 
-    funStaContainer.write("HELLO")
+    return dfStatMean4Rec
 
-#################### functions-sr
+def forSentence(s):
+
+    s = s.strip()
+    sNLP = nlp(s)
+    sWakati = [token.text for token in sNLP if not token.tag_.startswith("補助記号")]
+    sNoun = [token.text for token in sNLP if token.tag_.startswith("名詞")]
+
+    return [len(s),len(sWakati),len(sNoun)]
+
+def forDescrption(des):
+
+    des = des.strip()
+    sentlist = [sent for sent in des.split("\n") if len(sent) > 0]
+    desNLP = nlp(des)
+    desWakati = [token.text for token in desNLP if not token.tag_.startswith("補助記号")]
+    desNoun = [token.text for token in desNLP if token.tag_.startswith("名詞")]
+    resultsA = [len(des),len(desWakati),len(set(desWakati)),len(desNoun),len(set(desNoun)),len(sentlist),]
+    resultsASent = []
+
+    for sent in sentlist:
+        resultsASent.append(forSentence(sent))
+    sMean = np.mean(resultsASent, axis=0)
+
+    results = resultsA + sMean.tolist()
+    
+    return results
 
 def getDeviationValue(df,colName):
 
@@ -203,6 +216,24 @@ def getDeviationValue(df,colName):
 
     return result
 
+#################### 基礎統計セクション
+if optionPhase == "基礎統計":
+
+    import plotly.express as px
+    import plotly.graph_objects as go
+
+    homepageHolder.empty()
+    funStaContainer = funStaHolder.container()
+    funStaContainer.markdown(str_block_css,unsafe_allow_html=True)
+    funStaContainer.markdown("""
+        <h1 style="text-align:start;">
+            基礎<font color="deepskyblue">統計</font>量
+                <sub class="pagetitle">&nbsp;<font color="deepskyblue">F</font>undamental <font color="deepskyblue">S</font>tatistics
+                </sub></h1>
+        """,unsafe_allow_html=True)
+
+    funStaContainer.write("HELLO")
+
 #################### SR
 if optionPhase == "関連度計算":
     
@@ -210,7 +241,10 @@ if optionPhase == "関連度計算":
     semRelContainer = semRelHolder.container()
     semRelContainer.markdown(str_block_css,unsafe_allow_html=True)
     semRelContainer.markdown("""
-        <h1 style="text-align:start;"> キーワード<font color="deepskyblue">関連</font>度<sub class="pagetitle">&nbsp;Semantic Similarity</sub></h1>
+        <h1 style="text-align:start;">
+            キーワード<font color="deepskyblue">関連</font>度
+                <sub class="pagetitle">&nbsp;<font color="deepskyblue">S</font>emantic <font color="deepskyblue">S</font>imilarity
+                </sub></h1>
         """,unsafe_allow_html=True)
     txtTitleSR, txtContentSR = readUploadedFile()
 
@@ -246,6 +280,7 @@ if optionPhase == "関連度計算":
 
     ########## 関連度を調べたいキーワードの選択と自由入力
     with st.form("keywordselect"):
+        st.markdown(str_block_css,unsafe_allow_html=True)
         keyWordSelectForm = st.multiselect(
             label="キーワード",
             options=optionKeywords,
@@ -280,23 +315,125 @@ if optionPhase == "関連度計算":
         txtTitleSR, txtContentSR = readUploadedFile()
 
 
+########## Ginza
+def ginzaed(expression):
 
+    payload = {"inputs" : expression,}
+
+    response = client.invoke_endpoint(
+        EndpointName = 'ginzaElectra',
+        ContentType = 'application/json',
+        Body = json.dumps(payload),
+        )
+
+    result = json.loads(response["Body"].read().decode())
+    resultTxtList = [e["generated_text"] for e in result]
+
+    return resultTxtList
+
+@st.cache
+def loadCorpus(corpath):
+    dfKaigoSponsor = pd.read_csv(corpath)
+    kaigoSponsorSentList = list(
+        itertools.chain(
+            *[re.split("[。\n]", article) for article in dfKaigoSponsor.jobDescriptionText.tolist()]
+            ))
+    kaigoSponsorSentSet = [e.strip() for e in set(kaigoSponsorSentList) if len(e) > 0]
+    return kaigoSponsorSentSet
 
 #################### Expression Recommandation    
 if optionPhase == "原稿推薦表現":# and task_submitted:
+
     homepageHolder.empty()    
     expRecContainer = expRecHolder.container()
     expRecContainer.markdown(str_block_css,unsafe_allow_html=True)
     expRecContainer.markdown("""
-        <h1 style="text-align:start;"> 原稿<font color="deepskyblue">推薦</font>表現<sub class="pagetitle">&nbsp;Recommended Expression</sub></h1>
+        <h1 style="text-align:start;">
+            原稿<font color="deepskyblue">推薦</font>表現
+                <sub class="pagetitle">&nbsp;<font color="deepskyblue">R</font>ecommended <font color="deepskyblue">E</font>xpression
+                </sub></h1>
         """,unsafe_allow_html=True)
 
-    ########## load nlped sentences
-    #@st.experimental_singleton
-    #def pickle2List():
-        #pped = []
-        #pklPaths = glob.glob("./kaigoSponsorSentNLPed/*.pkl")
-        #for p in pklPaths:
-        #    pped += picklePick(p)
-        #pped = picklePick("./kaigoSponsorSentNLPed/kaigoSponsorSentNLPed_5.pkl")
-        #return pped
+
+    if optionGyosyu == "介護":
+        pass
+        #gyoSyuSents = loadCorpus(corpath)
+    elif optionGyosyu == "物流":
+        pass
+        #gyoSyuSents = loadCorpus(corpath)
+
+    testginza = ginzaed("今日はいい天気です")
+    st.write(testginza)
+
+
+########## GPT-2 rinna モデル
+      
+def jobPostingGenerator(expression):
+
+    payload = {
+        "inputs" : expression,
+        "parameters" : {
+            "top_k" : 100,
+            "return_full_text" : False,
+            "num_return_sequences" : 10,
+            },
+        }
+
+    response = client.invoke_endpoint(
+        EndpointName = 'rinnaJapaneseGPT2Medium',
+        ContentType = 'application/json',
+        Body = json.dumps(payload),
+        )
+
+    result = json.loads(response["Body"].read().decode())
+    resultTxtList = [e["generated_text"] for e in result]
+
+    # resultTxtList = []
+    # for e in result:
+        # resultTxtList += [e2 for e2 in e["generated_text"].split("。")[:-1] if len(e2) > 2]
+
+    return resultTxtList
+
+
+#################### JOB POSTING GENERATION    
+if optionPhase == "原稿生成β":
+
+    homepageHolder.empty()    
+    jobGenContainer = jobGenHolder.container()
+    jobGenContainer.markdown(str_block_css,unsafe_allow_html=True)
+    jobGenContainer.markdown("""
+        <h1 style="text-align:start;">
+            原稿<font color="deepskyblue">生成</font>表現
+                <sub class="pagetitle">&nbsp;<font color="deepskyblue">J</font>ob <font color="deepskyblue">P</font>osting <font color="deepskyblue">G</font>eneration
+                </sub></h1>
+        """,unsafe_allow_html=True)
+    
+    ########## sentence input form
+    with jobGenContainer.form("jobgenform"):
+
+        leader = st.text_area(
+            label = "",
+            max_chars = 200,
+            help = "rinna GPT-2",
+            placeholder = "表現に困っている要望・アピールポイント等を入力してください",
+            )
+        generatedLength = st.slider(
+            label = "文字数を決めてください",
+            min_value = 1,
+            max_value = 256,
+            value = (3,100),
+        )
+        
+        jobGenSubmitted = st.form_submit_button("生成")
+
+    if jobGenSubmitted:
+
+        generatedTxtList = jobPostingGenerator(leader)
+        for paragraph in generatedTxtList:
+            st.markdown(f"""
+                <div class="parblock">{paragraph}</div><p></p>
+                """,unsafe_allow_html=True)
+
+
+
+            
