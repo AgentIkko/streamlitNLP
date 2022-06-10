@@ -236,7 +236,7 @@ if optionPhase == "基礎統計":# and task_submitted:
     # def radar_chart(dataRadarChart,categoryRadarChart):
     def radar_chart(tb,categoryRadarChart):
 
-        dC = dfSponsorStat
+        dC = dfSponsorStat.copy()
         for e in [dfSponsorMeanRecord,dfSponsorProMeanRecord,targetRecord]:
             dC = dC.append(e)
         if tb == "t":
