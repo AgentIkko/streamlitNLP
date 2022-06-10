@@ -257,24 +257,24 @@ if optionPhase == "基礎統計":# and task_submitted:
         fig = go.Figure()
         
         fig.add_trace(go.Scatterpolar(
-            #r=closeline(2),
-            r=closeline(-1),
+            r=closeline(2),
+            #r=closeline(-1),
             theta=categories,
             line=dict(color="black",width=3),
             name="対象原稿", 
             ))
         
         fig.add_trace(go.Scatterpolar(
-            # r=closeline(0),
-            r=closeline(-3),
+            r=closeline(0),
+            #r=closeline(-3),
             theta=categories,
             line=dict(color="steelblue",width=2,dash="dot"),
             name="有料原稿", 
             ))
         
         fig.add_trace(go.Scatterpolar(
-            #r=closeline(1),
-            r=closeline(-2),
+            r=closeline(1),
+            #r=closeline(-2),
             theta=categories,
             line=dict(color="darkorange",width=2,dash="dot"),
             name="優良原稿", 
