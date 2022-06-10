@@ -233,7 +233,17 @@ if optionPhase == "基礎統計":# and task_submitted:
     funStaContainer.markdown("<hr>", unsafe_allow_html=True)
 
     ########### 処理part-2    
-    def radar_chart(dataRadarChart,categoryRadarChart):
+    # def radar_chart(dataRadarChart,categoryRadarChart):
+    def radar_chart(tb,categoryRadarChart):
+
+        dC = dfSponsorStat
+        for e in [dfSponsorMeanRecord,dfSponsorProMeanRecord,targetRecord]:
+            dC = dC.append(e)
+        if tb == "t":
+            dataRadarChart = dC[["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"]].rank(pct=True)
+        elif tb == "b":
+            dataRadarChart = dC[["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"]].rank(pct=True)
+
         
         def closeline(i):
             rlist = dataRadarChart.iloc[i].tolist()
@@ -292,8 +302,9 @@ if optionPhase == "基礎統計":# and task_submitted:
         # colTitleRadarChart,colTitleTable = st.columns([5,2])
         # with colTitleRadarChart:
             
-        dfTitleRC = dfFS[["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"]].rank(pct=True)
-        figRadarTitle = radar_chart(dfTitleRC,categoryRadarChart = ["職種字数","職種語数","職種名詞数","平均字数","平均語数","平均名詞数"])
+        # dfTitleRC = dfFS[["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"]].rank(pct=True)
+        # figRadarTitle = radar_chart(dfTitleRC,categoryRadarChart = ["職種字数","職種語数","職種名詞数","平均字数","平均語数","平均名詞数"])
+        figRadarTitle = radar_chart(tb="t", categoryRadarChart = ["職種字数","職種語数","職種名詞数","平均字数","平均語数","平均名詞数"])
         st.plotly_chart(figRadarTitle,use_container_width=True)
         
         with st.expander("データ"):
@@ -308,8 +319,9 @@ if optionPhase == "基礎統計":# and task_submitted:
         
         # colBodyRadarChart,colBodyTable = st.columns(2)
         # with colBodyRadarChart:
-        dfBodyRC = dfFS[["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"]].rank(pct=True)
-        figRadarBody = radar_chart(dfBodyRC,categoryRadarChart = ["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"])
+        # dfBodyRC = dfFS[["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"]].rank(pct=True)
+        # figRadarBody = radar_chart(dfBodyRC,categoryRadarChart = ["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"])
+        figRadarBody = radar_chart(tb="b", categoryRadarChart = ["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"])
         st.plotly_chart(figRadarBody,use_container_width=True)
 
             
