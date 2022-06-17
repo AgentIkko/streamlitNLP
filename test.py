@@ -12,6 +12,8 @@ from boto3.session import Session
 #################### html wrapper & page config
 session = Session(profile_name="genikko-profile")
 client = session.client("sagemaker-runtime",region_name="ap-northeast-1")
+clientLambda = session.client("lambda",region_name="ap-northeast-1")
+
 HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem">{}</div>"""
 str_block_css = f"""
     <style>
@@ -21,6 +23,13 @@ str_block_css = f"""
             border-radius   :   10px;
             background      :   deepskyblue;
             font-weight     :   bold;
+        }}
+        span.strblockGray{{
+            padding         :   8px;
+            /*border          :   1px solid lightskyblue;*/
+            border-radius   :   10px;
+            background      :   #f3f4f7;
+            font-size       :   110%;
         }}
         div.parblock{{
             padding         :   8px;
@@ -92,8 +101,7 @@ if infoPages == "ABOUT US":
     st.legacy_caching.clear_cache()
     homepageHolder.container()
 
-    with homepageHolder.container():
-    
+    def aboutUsContent():
         c1,c2,c3=st.columns([1,6,1])
         with c2: st.image("./indeed_logo_blue.png")
         st.markdown("<h1 style='text-align: center'>原稿解析・作成支援ツール</h1>",unsafe_allow_html=True)
@@ -103,14 +111,18 @@ if infoPages == "ABOUT US":
         c1,c2,c3=st.columns([1,6,1])
         with c2: st.image("./VQlogo.png")
 
+    with homepageHolder.container():
+        aboutUsContent()
+
 if infoPages == "HOME":
     homepageHolder.empty()
+    ########### login module
 
 #################### side bar
 st.sidebar.markdown('<h4 style="text-align: center">ファイルをアップロード</h4>',unsafe_allow_html=True)
 
 ########## file upload
-with st.sidebar.form("uploaderSingleFile",clear_on_submit=False):
+with st.sidebar.form("uploaderSingleFile", clear_on_submit=False,):
 
     ## 1. from uploaded files
     fileUploaderForm = st.file_uploader(label="① 原稿テキストファイル")
@@ -121,14 +133,13 @@ with st.sidebar.form("uploaderSingleFile",clear_on_submit=False):
 
 
 ########## 業種選択
-optionGyosyu = st.sidebar.selectbox(label="STEP 1: 業種選択", options=("-","介護","物流","販売"))
+optionGyosyu = st.sidebar.selectbox(label="STEP 1: 業種選択", options=("-","介護","物流","販売","飲食","事務"))
 st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
 st.sidebar.markdown(f"""
     <p style="text-align: center">現在の業種：<span class="strblock"><font color="white">{optionGyosyu}</font></span></p>
     """, unsafe_allow_html=True,
     )
     
-
 ########## タスク選択
 optionPhase = st.sidebar.selectbox(label="STEP 2: タスク選択",options=("-","基礎統計","関連度計算","原稿推薦表現","原稿生成β"))
 st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
@@ -147,7 +158,33 @@ with st.sidebar.expander("このアプリについて"):
 ########## copyright
 st.sidebar.markdown('<span style="font-size:12px;text-align: center"><b>Copyright ©2022 株式会社一広バリュークエスト</b></span>',unsafe_allow_html=True)
 
-#################### FSセクション用関数
+#################### FSセクション用関数 ####################
+
+### task : singleText | pairText
+### singleText: str
+### pairtText:[str1, str2]
+def ginzaProcessing(task="singleText",sent1="",sent2=""):
+
+    payload = {
+        "task" : task,
+        "singleText" : sent1,
+        "pairText" : [
+            sent1,
+            sent2
+            ]
+        }
+
+    response = clientLambda.invoke(
+        FunctionName = 'arn:aws:lambda:ap-northeast-1:836835325374:function:test',
+        InvocationType = 'RequestResponse',
+        #InvocationType = 'Event',
+        Payload = json.dumps(payload),
+        )
+
+    result = json.loads(response["Payload"].read().decode("utf-8"))
+
+    return result
+
 def multiAddDiv(df):
     result1 = sum(df["原稿文数"]*df["文平均字数"])/sum(df["原稿文数"])
     result2 = sum(df["原稿文数"]*df["文平均語数"])/sum(df["原稿文数"])
@@ -158,6 +195,7 @@ def multiAddDiv(df):
 def readUploadedFile():
 
     if fileUploaderForm is not None:
+        #readUploadedFile.clear()
         txt = StringIO(fileUploaderForm.getvalue().decode("utf-8")).read()
     else:
         with open("./testIkko.txt",encoding="utf-8") as fr:
@@ -167,43 +205,40 @@ def readUploadedFile():
             #一広バリュークエストに運用をまかせると求人費用30%以上削減できる。"""
     
     genkouTitle = txt.split("\n")[0]
-    genkouContent = "\n".join([e.strip() for e in txt.split("\n")[1:] if len(e)>0])
+    genkouContent = "\n".join([e.strip() for e in txt.split("\n")[1:] if len(e.strip())>0])
 
     return genkouTitle, genkouContent
 
-@st.cache
-def readDF(pathDF):
-
-    dfStat = pd.read_csv(pathDF)
-    dfStatMean = dfStat.mean().tolist()[1:]
-    dfStatMean4Rec = ["x","x"] + dfStatMean[:-3] + multiAddDiv(dfStat)
-
+@st.experimental_memo
+def docAveRec(df):
+    dfStatMean = df.mean().tolist()[1:-3]
+    dfStatMean4Rec = ["dummy0","dummy1"] + dfStatMean + multiAddDiv(df)
     return dfStatMean4Rec
 
 def forSentence(s):
 
     s = s.strip()
-    sNLP = nlp(s)
-    sWakati = [token.text for token in sNLP if not token.tag_.startswith("補助記号")]
-    sNoun = [token.text for token in sNLP if token.tag_.startswith("名詞")]
+    sParsed = ginzaProcessing(task="singleText",sent1=s)
+    sWakati = [e[0] for e in sParsed["info"] if not e[1].startswith("補助記号")]
+    sNoun = [e[0] for e in sParsed["info"] if e[1].startswith("名詞")]
 
     return [len(s),len(sWakati),len(sNoun)]
 
-def forDescrption(des):
+def forDescrption(para):
 
-    des = des.strip()
-    sentlist = [sent for sent in des.split("\n") if len(sent) > 0]
-    desNLP = nlp(des)
-    desWakati = [token.text for token in desNLP if not token.tag_.startswith("補助記号")]
-    desNoun = [token.text for token in desNLP if token.tag_.startswith("名詞")]
-    resultsA = [len(des),len(desWakati),len(set(desWakati)),len(desNoun),len(set(desNoun)),len(sentlist),]
-    resultsASent = []
+    para = para.strip()
+    sentlist = [sent for sent in para.split("\n") if len(sent) > 0]
+    paraParsed = ginzaProcessing(task="singleText",sent1=para)
+    paraWakati = [e[0] for e in paraParsed["info"] if not e[1].startswith("補助記号")]
+    paraNoun = [e[0] for e in paraParsed["info"] if e[1].startswith("名詞")]
+    resultsPara = [len(para),len(paraWakati),len(set(paraWakati)),len(paraNoun),len(set(paraNoun)),len(sentlist),]
+    resultsSent = []
 
     for sent in sentlist:
-        resultsASent.append(forSentence(sent))
-    sMean = np.mean(resultsASent, axis=0)
+        resultsSent.append(forSentence(sent))
+    sMean = np.mean(resultsSent, axis=0)
 
-    results = resultsA + sMean.tolist()
+    results = resultsPara + sMean.tolist()
     
     return results
 
@@ -229,10 +264,160 @@ if optionPhase == "基礎統計":
         <h1 style="text-align:start;">
             基礎<font color="deepskyblue">統計</font>量
                 <sub class="pagetitle">&nbsp;<font color="deepskyblue">F</font>undamental <font color="deepskyblue">S</font>tatistics
-                </sub></h1>
+                </sub></h1><hr>
         """,unsafe_allow_html=True)
 
-    funStaContainer.write("HELLO")
+    ########## 計算パート
+    txtTitle, txtContent = readUploadedFile()
+
+    #@st.experimental_singleton
+    def statTargetDoc(_txtTitle,_txtContent):
+        statTitle = forSentence(_txtTitle)
+        statContent = forDescrption(_txtContent)
+        return ["dummy0","dummy1",*statTitle,*statContent]
+    
+    targetDocRec = statTargetDoc(txtTitle,txtContent)
+    dfBackground = pd.read_csv(f"./{optionGyosyu}_sponsorPro_stat.csv")
+    lastRowRec = docAveRec(dfBackground)
+
+    with funStaContainer:
+
+        indexRange1 = [2,3,4,-3,-2,-1]
+        indexRange2 = [5,6,7,8,9,10]
+        labelRange = ["dummy1","dummy2","職種字数","職種語数","職種名詞数","原稿字数","原稿語数","原稿語数(異)","原稿名詞数","原稿名詞数(異)","原稿文数","文平均字数","文平均語数","文平均名詞数"]
+        
+        st.markdown(str_block_css,unsafe_allow_html=True)
+        st.markdown(f"""
+            <p>対象原稿職種：<span class="strblockGray">{txtTitle}</span></p>
+            """, unsafe_allow_html=True,)
+        for (i,col) in zip(indexRange1,st.columns(6)):
+            targetNum = np.round(targetDocRec[i],decimals=1)
+            deltaNum = np.round(targetDocRec[i]-lastRowRec[i],decimals=1)
+            col.metric(labelRange[i],targetNum,deltaNum)
+
+        st.markdown(str_block_css,unsafe_allow_html=True)
+        st.markdown(f"""
+            <p>対象原稿内容：<span class="strblockGray">{txtContent[:25]}（以下略）</span></p>
+            """, unsafe_allow_html=True,)
+        for (i,col) in zip(indexRange2,st.columns(6)):
+            targetNum = np.round(targetDocRec[i],decimals=1)
+            deltaNum = np.round(targetDocRec[i]-lastRowRec[i],decimals=1)
+            col.metric(labelRange[i],targetNum,deltaNum)
+
+    funStaContainer.markdown("<hr>", unsafe_allow_html=True)
+
+    ########## グラフ出力パート
+    @st.experimental_singleton
+    def radar_chart(dataRadarChart,categoryRadarChart):       
+        def closeline(i):
+            rlist = dataRadarChart.iloc[i].tolist()
+            rlist.append(rlist[0])
+            rr = rlist
+            return rr
+        
+        categoryRadarChart.append(categoryRadarChart[0])
+        categories = categoryRadarChart
+        
+        fig = go.Figure()
+        
+        fig.add_trace(go.Scatterpolar(
+            r=closeline(-1),
+            theta=categories,
+            line=dict(color="black",width=3),
+            name="対象原稿", 
+            fill="toself",
+            ))
+        
+        fig.add_trace(go.Scatterpolar(
+            r=closeline(-2),
+            theta=categories,
+            line=dict(color="deepskyblue",width=2,dash="dot"),
+            name="有料原稿", 
+            fill="toself",
+            ))
+
+        fig.update_layout(
+            margin=dict(l=64,r=64,b=10,t=10),
+            #paper_bgcolor="lightskyblue",
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0.00,1.00],
+                )),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=0.8,
+                xanchor="left",
+                x=0.01,
+            ),
+            showlegend=True,
+            )
+        
+        return fig
+
+    lastRowRec_title = lastRowRec[2:5] + lastRowRec[-3:]
+    lastRowRec_content = lastRowRec[5:-3]
+    targetDocRec_title = targetDocRec[2:5] + targetDocRec[-3:]
+    targetDocRec_content = targetDocRec[5:-3]
+
+    # fig2 = px.histogram(df4RadarChart_title["タイトル字数"])
+    # st.plotly_chart(fig2)
+    col1,col2 = st.columns(2)
+
+    with col1:#with funStaContainer:
+        st.markdown("<h4 style='text-align: center; color: black;'>文単位解析</h4>", unsafe_allow_html=True)
+
+        df4RadarChart_title = dfBackground[["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"]]
+        appendDF = pd.DataFrame(
+            [lastRowRec_title,targetDocRec_title],
+            columns=["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"])
+        df4RadarChart_title_med = df4RadarChart_title.append(appendDF)
+        df4RadarChart_title_rank = df4RadarChart_title_med.rank(
+            method="dense",
+            ascending=True,
+            pct=True)
+
+        fig4RadarChart_title = radar_chart(
+            df4RadarChart_title_rank,
+            categoryRadarChart=["職種字数","職種語数","職種名詞数","平均字数","平均語数","平均名詞数"])
+        st.plotly_chart(
+            fig4RadarChart_title,
+            use_container_width=True)
+
+        with st.expander("データ",expanded=True):
+
+            st.dataframe(
+                data = df4RadarChart_title_med[["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"]],
+                width = 800,
+                height = 400,) 
+
+    with col2:#with funStaContainer:
+        st.markdown("<h4 style='text-align: center; color: black;'>原稿単位解析</h4>", unsafe_allow_html=True)
+
+        df4RadarChart_content = dfBackground[["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"]]
+        appendDF = pd.DataFrame(
+            [lastRowRec_content,targetDocRec_content],
+            columns=["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"])
+        df4RadarChart_content_med = df4RadarChart_content.append(appendDF)
+        df4RadarChart_content_rank = df4RadarChart_content_med.rank(
+            method="dense",
+            ascending=True,
+            pct=True)
+
+        fig4RadarChart_content = radar_chart(
+            df4RadarChart_content_rank,
+            categoryRadarChart=["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"])
+        st.plotly_chart(
+            fig4RadarChart_content,
+            use_container_width=True)
+
+        with st.expander("データ",expanded=True): 
+
+            st.dataframe(
+                data = df4RadarChart_content_med[["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"]].astype(int),
+                width = 800,
+                height = 400,)  
 
 #################### SR
 if optionPhase == "関連度計算":
@@ -263,10 +448,16 @@ if optionPhase == "関連度計算":
             "物流","輸送",
             ],
         "販売":[
-            "アパレル販売","販売スタッフ",
+            "販売","アパレル販売","販売スタッフ",
             ],
         "営業":[
             "営業","不動産",
+            ],
+        "飲食":[
+            "飲食",
+            ],
+        "事務":[
+            "事務",
             ],
         }
 
@@ -280,6 +471,7 @@ if optionPhase == "関連度計算":
 
     ########## 関連度を調べたいキーワードの選択と自由入力
     with st.form("keywordselect"):
+
         st.markdown(str_block_css,unsafe_allow_html=True)
         keyWordSelectForm = st.multiselect(
             label="キーワード",
@@ -293,8 +485,7 @@ if optionPhase == "関連度計算":
             max_chars=100,
             placeholder="e.g. keyword1,keyword2,keyword3",
            )
-        defaultData = st.checkbox(label="既存データで計算",value=True,)
-        st.session_state["isPressedSR"] = button_states()
+
         srConfirmButton = st.form_submit_button("キーワード確定")
 
     candidateKeyWord = keyWordSelectForm
@@ -303,35 +494,43 @@ if optionPhase == "関連度計算":
     candidateKeyWord = list(set([e for e in candidateKeyWord if len(e) > 0]))
 
     ########## 関連度計算フェース
-    if srConfirmButton and defaultData:
+    if srConfirmButton:
 
-        st.session_state["isPressedSR"]["pressed"] = True
         txtTitleSR, txtContentSR = readUploadedFile()
 
+        with st.spinner("データ処理中..."):
+            ########## キーワード確定
+            dictOfSimScores = {kw : [] for kw in candidateKeyWord}
+            dictOfSimScores.update({"職種": []})
 
-    elif srConfirmButton and not defaultData:
+            ########## 関連度計算
+            dic["職種"].append("TARGET")
+            for kw in kwlist:
+                kw4SimCal = kw+"の求人"
+                simScore = ginzaProcessing(task="pairText",sent1=kw4sim,sent2=txtContentSR)["cosine_similarity"]
+                dic[kw].append(simScore)
 
-        st.session_state["isPressedSR"]["pressed"] = True
-        txtTitleSR, txtContentSR = readUploadedFile()
+            simScore4singleGenkou(dictOfSimScores,candidateKeyWord,"TARGET",txtContentSR)
 
+            st.success("処理終了")
 
-########## Ginza
-def ginzaed(expression):
+            dfSponsorProGenkou = pd.read_csv("./data_pandas/kaigo_sponsorPro_text.csv")
+            contraTitles = dfSponsorProGenkou["jobTitle"].tolist()
+            contraContents = dfSponsorProGenkou["jobDescriptionText"].tolist()
 
-    payload = {"inputs" : expression,}
+            status_text = st.empty()
+            loadBarSR = st.progress(0)
+            loopCount = len(contraTitles)
 
-    response = client.invoke_endpoint(
-        EndpointName = 'ginzaElectra',
-        ContentType = 'application/json',
-        Body = json.dumps(payload),
-        )
+            for i,(t,c) in enumerate(zip(contraTitles,contraContents)):
+                simScore4singleGenkou(dictOfSimScores,candidateKeyWord,t,c)
+                status_text.text(f"職種：{t[:25]}...\t Progress: {round(i/loopCount*100,2)}%")
+                loadBarSR.progress(int(i/loopCount*100+1))
 
-    result = json.loads(response["Body"].read().decode())
-    resultTxtList = [e["generated_text"] for e in result]
+            existedRelData = pd.DataFrame.from_dict(dictOfSimScores)
+            st.success("DONE")        
 
-    return resultTxtList
-
-@st.cache
+@st.experimental_memo
 def loadCorpus(corpath):
     dfKaigoSponsor = pd.read_csv(corpath)
     kaigoSponsorSentList = list(
@@ -351,7 +550,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
         <h1 style="text-align:start;">
             原稿<font color="deepskyblue">推薦</font>表現
                 <sub class="pagetitle">&nbsp;<font color="deepskyblue">R</font>ecommended <font color="deepskyblue">E</font>xpression
-                </sub></h1>
+                </sub></h1><hr>
         """,unsafe_allow_html=True)
 
 
@@ -362,7 +561,7 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
         pass
         #gyoSyuSents = loadCorpus(corpath)
 
-    testginza = ginzaed("今日はいい天気です")
+    testginza = ginzaProcessing(task="singleText",sent1="今日はいい天気です")
     st.write(testginza)
 
 
