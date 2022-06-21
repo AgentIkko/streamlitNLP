@@ -31,6 +31,15 @@ str_block_css = f"""
             background      :   #f3f4f7;
             font-size       :   110%;
         }}
+        span.strblockBlue{{
+            padding         :   6px;
+            border          :   1.5px solid lightskyblue;
+            border-radius   :   10px;
+            /*background      :   lightskyblue;*/
+            font-size       :   80%;
+            margin          :   5px;
+            display         :   inline-block;
+        }}
         div.parblock{{
             padding         :   8px;
             /*border          :   1px solid lightskyblue;*/
@@ -86,6 +95,7 @@ st.sidebar.image("./VQlogo.png")
 st.sidebar.image(image="./AIRCreW_logo.PNG",width=300)
 
 #################### homepage
+st.session_state["TermSemSim2ExpRec"] = []
 
 homepageHolder = st.empty()
 aboutusHolder = st.empty()
@@ -507,11 +517,44 @@ if optionPhase == "関連度計算":
     if srConfirmButton:
 
         txtTitleSR, txtContentSR = readUploadedFile()
+        nlpedTarget = ginzaProcessing(task="singleText",sent1=txtContentSR)
+        targetContent4Diff = list(set(nlpedTarget["info_ent"] + nlpedTarget["info_nounChunk"]))
 
         with st.spinner("データ処理中..."):
             ########## キーワード確定
             dictOfSimScores = {kw : [] for kw in candidateKeyWord}
             dictOfSimScores.update({"職種": []})
+
+            dictOfSim4Entity = {kw : [] for kw in candidateKeyWord}
+            dictOfSim4Entity.update({"NameEntity": []})
+
+        try:
+            sim4EntData = pd.read_csv(f"phase2_Ent_{optionGyosyu}.csv")
+            st.info("CAUTION: デモ用データ")
+        except Exception:
+            with st.spinner("Name Entities Calculating..."):
+
+                dfSponsorProGenkou4NE = pd.read_csv(f"{optionGyosyu}_sponsorPro_text.csv")
+                contraContents4NE = [e.strip() for e in "\n".join(dfSponsorProGenkou4NE["jobDescriptionText"].tolist()).split("\n") if len(e.strip()) > 0]
+                allEntNC = []
+
+                for sentence in contraContents4NE:
+                    res = ginzaProcessing(task="singleText",sent1=sentence)
+                    resEntNC = res["info_ent"] + res["info_nounChunk"]
+                    allEntNC += resEntNC
+                
+                allEntNCNoDup = list(set(allEntNC))
+                dictOfSim4Entity["NameEntity"] += allEntNCNoDup
+
+                for kw in candidateKeyWord:
+                    for ent in allEntNCNoDup:
+                        sim4Ent = ginzaProcessing(task="pairText",sent1=kw+"の求人",sent2=ent)["cosine_similarity"]
+                        dictOfSim4Entity[kw].append(sim4Ent)
+
+                sim4EntData = pd.DataFrame.from_dict(dictOfSim4Entity)
+                sim4EntData.to_csv(f"phase2_Ent_{optionGyosyu}.csv")
+
+        #st.success("なんとかおわったあ")
 
         try:
             simScoreData = pd.read_csv(f"phase2_{optionGyosyu}.csv") 
@@ -543,6 +586,7 @@ if optionPhase == "関連度計算":
             simScoreData.to_csv(f"phase2_{optionGyosyu}.csv")
 
     with st.spinner("出力中..."):
+
         # lambda のほうで ent の出力を追加
         def getDeviationValue(df,colName):
             seriesCal = df[colName]
@@ -556,13 +600,35 @@ if optionPhase == "関連度計算":
                 sss = simScoreData[kw].rank(
                     ascending=True,
                     pct=True).tolist()[0]
-                #sssDV = getDeviationValue(simScoreData,kw)[0]
-                st.metric("偏差値",sss)
+                sssDV = getDeviationValue(simScoreData,kw)[0]
+
+                expanderLabel = f"【{kw}】偏差値：{int(sssDV)}；順位：{round(sss,4)*100} %"
+
+
+
+                #st.metric("順位",sss)
+                sortedsim4EntData = sim4EntData.sort_values(
+                    by = kw,ascending = False,)
+                entCandidate = sortedsim4EntData["NameEntity"].tolist()
+                entDisplay = [e.strip() for e in entCandidate if e not in targetContent4Diff]
+                kwParsed = ginzaProcessing(task="singleText",sent1=kw)
+                entDisplay = [e for e in entDisplay if kw not in e]
+
+                with open(f"{kw}_save4now.pk","wb") as pklw:
+                    pickle.dump(entDisplay,pklw)
+
+                styledStr = "<p style='text-align:center;line-height:2.5;'>"
+                for ent in entDisplay[:51]:
+                    styledStr += f"<span class='strblockBlue'>{ent}</span>"
+                styledStr += "</p><hr>"
+                with st.expander(expanderLabel):
+                    st.markdown(str_block_css,unsafe_allow_html=True)
+                    st.markdown(styledStr,unsafe_allow_html=True)
+
                 
         except NameError:
             st.info("キーワードをまず選択してください。\n")     
 
-@st.experimental_memo
 def loadCorpus(corpath):
     dfKaigoSponsor = pd.read_csv(corpath)
     kaigoSponsorSentList = list(
@@ -586,15 +652,42 @@ if optionPhase == "原稿推薦表現":# and task_submitted:
         """,unsafe_allow_html=True)
 
 
-    if optionGyosyu == "介護":
-        pass
-        #gyoSyuSents = loadCorpus(corpath)
-    elif optionGyosyu == "物流":
-        pass
-        #gyoSyuSents = loadCorpus(corpath)
+    if optionGyosyu == "-":
+        st.info("業種を選んでください")
+    else:
+        gyoSyuSents = loadCorpus(f"{optionGyosyu}_sponsor_text.csv")
+    
+    with open("介護職員_save4now.pk","rb") as pklr:
+        termlist = pickle.load(pklr)
 
-    testginza = ginzaProcessing(task="singleText",sent1="今日はいい天気です")
-    st.write(testginza)
+    phase3Candidate = termlist[:51]
+
+    with st.form("phase3"):
+        phase3Form = st.multiselect(
+            label="これらの関連キーワードでよろしいですか",
+            options = phase3Candidate,
+            default = phase3Candidate[:11],
+            help = "数量やグループ等の調整が可能",
+        )
+        phase3ConfirmButton = st.form_submit_button("関連語確定")
+
+    phase3Term = phase3Form
+    if phase3ConfirmButton:
+        for t in phase3Term:
+            with st.expander(f"{t}を含む表現"):
+
+                para4Display = ""
+
+                for s in gyoSyuSents:
+                    if t in s:
+                        sent4Display = f"<div class='parblock'>{s}</div><p></p>"
+                        para4Display += sent4Display
+                
+                para4Display +="<hr>"
+                st.markdown(str_block_css,unsafe_allow_html=True)
+                st.markdown(para4Display,unsafe_allow_html=True)
+
+
 
 
 ########## GPT-2 rinna モデル

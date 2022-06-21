@@ -1,5 +1,8 @@
 # TODO
 
+### 最優先
+- multipage app 化
+
 ### cache系
 - upload ファイル反映するには memo, singleton は使えないが、計算わりと遅い
 - なんで memo か singleton をつけて、upload ファイルのデータをクリアできるモジュールをつける
