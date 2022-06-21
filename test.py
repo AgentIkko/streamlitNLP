@@ -494,6 +494,16 @@ if optionPhase == "関連度計算":
     candidateKeyWord = list(set([e for e in candidateKeyWord if len(e) > 0]))
 
     ########## 関連度計算フェース
+    def getSimValue(dic4store,kwlist,targetDoc):
+        for kw in kwlist:
+            kw4SimCal = kw+"の求人"
+            simScore = ginzaProcessing(
+                task="pairText",
+                sent1=kw4SimCal,
+                sent2=targetDoc)["cosine_similarity"]
+            dic4store[kw].append(simScore)
+        return dic4store
+
     if srConfirmButton:
 
         txtTitleSR, txtContentSR = readUploadedFile()
@@ -503,32 +513,54 @@ if optionPhase == "関連度計算":
             dictOfSimScores = {kw : [] for kw in candidateKeyWord}
             dictOfSimScores.update({"職種": []})
 
+        try:
+            simScoreData = pd.read_csv(f"phase2_{optionGyosyu}.csv") 
+        except Exception:
             ########## 関連度計算
-            dic["職種"].append("TARGET")
-            for kw in kwlist:
-                kw4SimCal = kw+"の求人"
-                simScore = ginzaProcessing(task="pairText",sent1=kw4sim,sent2=txtContentSR)["cosine_similarity"]
-                dic[kw].append(simScore)
-
-            simScore4singleGenkou(dictOfSimScores,candidateKeyWord,"TARGET",txtContentSR)
-
+            dictOfSimScores["職種"].append("TARGET")
+            dictOfSimScores = getSimValue(
+                dic4store = dictOfSimScores,
+                kwlist = candidateKeyWord,
+                targetDoc = txtContentSR,)
             st.success("処理終了")
 
-            dfSponsorProGenkou = pd.read_csv("./data_pandas/kaigo_sponsorPro_text.csv")
+            dfSponsorProGenkou = pd.read_csv(f"{optionGyosyu}_sponsorPro_text.csv")
             contraTitles = dfSponsorProGenkou["jobTitle"].tolist()
             contraContents = dfSponsorProGenkou["jobDescriptionText"].tolist()
 
-            status_text = st.empty()
-            loadBarSR = st.progress(0)
-            loopCount = len(contraTitles)
+            #status_text = st.empty()
+            #loadBarSR = st.progress(0)
+            #loopCount = len(contraTitles)
 
-            for i,(t,c) in enumerate(zip(contraTitles,contraContents)):
-                simScore4singleGenkou(dictOfSimScores,candidateKeyWord,t,c)
-                status_text.text(f"職種：{t[:25]}...\t Progress: {round(i/loopCount*100,2)}%")
-                loadBarSR.progress(int(i/loopCount*100+1))
+            for (t,c) in zip(contraTitles,contraContents):
+                dictOfSimScores["職種"].append(t)
+                dictOfSimScores = getSimValue(
+                    dic4store = dictOfSimScores,
+                    kwlist =candidateKeyWord ,
+                    targetDoc = c,)
 
-            existedRelData = pd.DataFrame.from_dict(dictOfSimScores)
-            st.success("DONE")        
+            simScoreData = pd.DataFrame.from_dict(dictOfSimScores)
+            simScoreData.to_csv(f"phase2_{optionGyosyu}.csv")
+
+    with st.spinner("出力中..."):
+        # lambda のほうで ent の出力を追加
+        def getDeviationValue(df,colName):
+            seriesCal = df[colName]
+            seriesCal_std = seriesCal.std(ddof=0)
+            seriesCal_mean = seriesCal.mean()
+            result = seriesCal.map(lambda x: round((x - seriesCal_mean) / seriesCal_std * 10 +50)).astype(int).tolist()
+            return result
+
+        try:
+            for kw in candidateKeyWord:
+                sss = simScoreData[kw].rank(
+                    ascending=True,
+                    pct=True).tolist()[0]
+                #sssDV = getDeviationValue(simScoreData,kw)[0]
+                st.metric("偏差値",sss)
+                
+        except NameError:
+            st.info("キーワードをまず選択してください。\n")     
 
 @st.experimental_memo
 def loadCorpus(corpath):

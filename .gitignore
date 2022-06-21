@@ -1,5 +1,6 @@
 *.pkl
 *.png
 *.log
+*.out
 .ipynb_checkpoints/
 data_pandas/.ipynb_checkpoints/
