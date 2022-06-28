@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 import boto3
 from boto3.session import Session
+import plotly.graph_objects as go
+import plotly.express as px
 
 #################### html wrapper & page config
 session = Session(profile_name="genikko-profile")
@@ -68,111 +70,119 @@ hide_streamlit_style = """
             </style>
             """
 nlp = spacy.load("ja_ginza")
-# streamlit では """ が効かない
 st.set_page_config(
     page_title="原稿解析 AIRCreW",
-    page_icon="./favicon.ico",
+    page_icon="./materials/favicon.ico",
     layout="centered",
     initial_sidebar_state="auto",
     )
-
 st.markdown(hide_streamlit_style, unsafe_allow_html=True) 
 
-#################### button status
-@st.cache(allow_output_mutation=True)
-def button_states():
-    return {"pressed":None}
-def session_change():
-    if "isPressedModel" in st.session_state:
-        st.session_state["isPressedModel"].update({"pressed":None})
-    if "isPressedTask" in st.session_state:
-        st.session_state["isPressedTask"].update({"pressed":None})
-    if "isPressedSR" in st.session_state:
-        st.session_state["isPressedSR"].update({"pressed":None})
+def noSymbolic(sentence):
     
-#################### sidebarImage
-st.sidebar.image("./VQlogo.png")
-st.sidebar.image(image="./AIRCreW_logo.PNG",width=300)
+    replacements = [
+        ('&lt;', ''), ('&gt;', ''), ('&amp;', ''),
+        ('https?://[\w/:%#\$&\?\(\)~\.=\+\-]+', '[U]'),
+        ('www?[\w/:%#\$&\?\(\)~\.=\+\-]+', '[U]'),
+        ('\b\d{1,3}(,\d{3})*\b', '[N]'), ('\d+?(万円|円|万)', '[S]'), ('\d+?分', '[D]'), ('\d{1,2}:\d{2}', '[T]'), ('\d+', '0'),
+        ('[◆♪●◎〜 ゚■✅️⭐≫≪※★┗━┃＃【】「」、。＝～☆＜＼：✿「」〔〕“”〈〉《》*『』【】＆＊・（）＄＃＠？！｀＋￥％�｜∴∵／°✧＞→｢｣₊⁎˳⁺༚①②◇｡･ﾟ…▼↓]',' '),
+        ('[!-/:-@[-`{-~]','~SYM~'), ('(~SYM~)+?',' '),
+        ]
+    
+    for old,new in replacements:
+        sentence = re.sub(old, new, sentence)
 
-#################### homepage
-st.session_state["TermSemSim2ExpRec"] = []
+    return " ".join(sentence.split()).strip()
+    
+def sidebarDisplay(taskLabel):
 
-homepageHolder = st.empty()
-aboutusHolder = st.empty()
-funStaHolder = st.empty()
-semRelHolder = st.empty()
-expRecHolder = st.empty()
-jobGenHolder =st.empty()
+    st.sidebar.image("./materials/VQlogo.png")
+    st.sidebar.image(image="./materials/AIRCreW_logo.PNG",width=300)
 
-infoPages = st.sidebar.radio("",options=(["HOME","ABOUT US"]))
+    if "industry" in st.session_state:
+        gyosyuDisplay = st.session_state.industry
+    else: gyosyuDisplay = "-"
 
-if infoPages == "ABOUT US":
-    funStaHolder.empty()
-    st.legacy_caching.clear_cache()
-    homepageHolder.container()
+    st.markdown(str_block_css,unsafe_allow_html=True)
+    st.sidebar.markdown(f"""
+        <p style="text-align: center">現在の業種：<span class="strblock"><font color="white">{gyosyuDisplay}</font></span></p>
+        """, unsafe_allow_html=True,)
 
-    def aboutUsContent():
-        c1,c2,c3=st.columns([1,6,1])
-        with c2: st.image("./indeed_logo_blue.png")
-        st.markdown("<h1 style='text-align: center'>原稿解析・作成支援ツール</h1>",unsafe_allow_html=True)
-        c1,c2,c3=st.columns([1,6,1])
-        with c2: st.image("./AIRCreW_logo.PNG")
-        st.markdown("<h2 style='text-align: center'><b>via</b></h2>",unsafe_allow_html=True)
-        c1,c2,c3=st.columns([1,6,1])
-        with c2: st.image("./VQlogo.png")
+    st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
+    st.sidebar.markdown(f"""
+        <p style="text-align: center">現在のタスク：<span class="strblock"><font color="white">{taskLabel}</font></span></p>
+        """, unsafe_allow_html=True,)
+    
+    with st.sidebar.expander("このアプリについて"):
+        st.write("""
+            AI(人工知能)のチカラを使ってindeed原稿を解析・改善する独自ツールを展開しています。
+            原稿の比較検証等を可視化することで、改善ポイントを明確にして最適なindeed原稿へと導くことが可能です。
+        """)
 
-    with homepageHolder.container():
-        aboutUsContent()
+    st.sidebar.markdown('<span style="font-size:12px;text-align: center"><b>Copyright ©2022 株式会社一広バリュークエスト</b></span>',unsafe_allow_html=True)
 
-if infoPages == "HOME":
-    homepageHolder.empty()
-    ########### login module
+sidebarDisplay(taskLabel="-")
 
-#################### side bar
-st.sidebar.markdown('<h4 style="text-align: center">ファイルをアップロード</h4>',unsafe_allow_html=True)
+def readUploadedFile(fileUploaderForm):
 
-########## file upload
-with st.sidebar.form("uploaderSingleFile", clear_on_submit=False,):
+    if fileUploaderForm is not None:
+        txt = StringIO(
+            fileUploaderForm.getvalue().decode("utf-8")
+            ).read()
+    else:
+        st.warning("No file detected. Will use the default data for demonstration purposes.")
+        with open("./testIkko.txt",encoding="utf-8") as fr:
+            txt = fr.read()
+    
+    st.session_state.target_file = txt
+    
+    return txt
+
+def titleContent(txt):
+
+    title = txt.split("\n")[0]
+
+    content = []
+    for e in txt.split("\n")[1:]:
+        eNoSym = noSymbolic(e).strip()
+        if len(eNoSym) > 0:
+            content.append(eNoSym)
+    content = "\n".join(content)
+
+    return title, content
+
+########## H3 ファイルをアップロード
+
+st.markdown('<h3 style="text-align: center">ファイルをアップロード</h4>',unsafe_allow_html=True)
+
+if "target_file" not in st.session_state:
+    st.session_state.target_file = 0
+
+with st.form("uploaderSingleFile", clear_on_submit=True,):
 
     ## 1. from uploaded files
-    fileUploaderForm = st.file_uploader(label="① 原稿テキストファイル")
-    submitted = st.form_submit_button("アップロード")
+    fileUploaderForm = st.file_uploader(label="")
+    submitted = st.form_submit_button(label="アップロード")
 
-    if fileUploaderForm and submitted is not None:
-        st.write("ファイルをアップロードしました。")
+if fileUploaderForm and submitted:
+    st.success("ファイルをアップロードしました。")
 
+readUploadedFile(fileUploaderForm)
 
-########## 業種選択
-optionGyosyu = st.sidebar.selectbox(label="STEP 1: 業種選択", options=("-","介護","物流","販売","飲食","事務"))
-st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
-st.sidebar.markdown(f"""
-    <p style="text-align: center">現在の業種：<span class="strblock"><font color="white">{optionGyosyu}</font></span></p>
-    """, unsafe_allow_html=True,
-    )
-    
+########## H3 業種選択
+
+st.markdown('<h3 style="text-align: center">業種を選択してください</h4>',unsafe_allow_html=True)
+optionGyosyu = st.selectbox(label="", options=("-","介護","物流","販売","飲食","事務"))
+gyosyuStore = optionGyosyu
+
+if "industry" not in st.session_state:
+    st.session_state.industry = "notSelected"
+elif st.session_state != optionGyosyu:
+    st.session_state.industry = gyosyuStore
+
 ########## タスク選択
-optionPhase = st.sidebar.selectbox(label="STEP 2: タスク選択",options=("-","基礎統計","関連度計算","原稿推薦表現","原稿生成β"))
-st.sidebar.markdown(str_block_css,unsafe_allow_html=True)
-st.sidebar.markdown(f"""
-    <p style="text-align: center">現在のタスク：<span class="strblock"><font color="white">{optionPhase}</font></span></p>
-    """, unsafe_allow_html=True,
-    )
+#optionPhase = st.sidebar.selectbox(label="STEP 2: タスク選択",options=("-","関連度計算","原稿推薦表現","原稿生成β"))
 
-########## info expander
-with st.sidebar.expander("このアプリについて"):
-    st.write("""
-        AI(人工知能)のチカラを使ってindeed原稿を解析・改善する独自ツールを展開しています。
-        原稿の比較検証等を可視化することで、改善ポイントを明確にして最適なindeed原稿へと導くことが可能です。
-    """)
-
-########## copyright
-st.sidebar.markdown('<span style="font-size:12px;text-align: center"><b>Copyright ©2022 株式会社一広バリュークエスト</b></span>',unsafe_allow_html=True)
-
-#################### FSセクション用関数 ####################
-
-### task : singleText | pairText
-### singleText: str
-### pairtText:[str1, str2]
 def ginzaProcessing(task="singleText",sent1="",sent2=""):
 
     payload = {
@@ -201,28 +211,12 @@ def multiAddDiv(df):
     result3 = sum(df["原稿文数"]*df["文平均名詞数"])/sum(df["原稿文数"])
     return [result1,result2,result3]
 
-@st.cache
-def readUploadedFile():
-
-    if fileUploaderForm is not None:
-        #readUploadedFile.clear()
-        txt = StringIO(fileUploaderForm.getvalue().decode("utf-8")).read()
-    else:
-        with open("./testIkko.txt",encoding="utf-8") as fr:
-            txt = fr.read()
-            #txt = """一広バリュークエストの独自サービス\n
-            #AIRCreWで原稿解析。\n
-            #一広バリュークエストに運用をまかせると求人費用30%以上削減できる。"""
-    
-    genkouTitle = txt.split("\n")[0]
-    genkouContent = "\n".join([e.strip() for e in txt.split("\n")[1:] if len(e.strip())>0])
-
-    return genkouTitle, genkouContent
-
-@st.experimental_memo
 def docAveRec(df):
+
     dfStatMean = df.mean().tolist()[1:-3]
     dfStatMean4Rec = ["dummy0","dummy1"] + dfStatMean + multiAddDiv(df)
+    st.session_state.statBackgroundAvg = dfStatMean4Rec
+
     return dfStatMean4Rec
 
 def forSentence(s):
@@ -261,503 +255,126 @@ def getDeviationValue(df,colName):
 
     return result
 
+def statTargetDoc(_txtTitle,_txtContent):
+
+    statTitle = forSentence(_txtTitle)
+    statContent = forDescrption(_txtContent)
+    record = ["dummy0","dummy1",*statTitle,*statContent]
+
+    st.session_state.statTargetTxt = record
+
+    return record
+
+def radar_chart(dataRadarChart,categoryRadarChart):       
+    def closeline(i):
+        rlist = dataRadarChart.iloc[i].tolist()
+        rlist.append(rlist[0])
+        rr = rlist
+        return rr
+    
+    categoryRadarChart.append(categoryRadarChart[0])
+    categories = categoryRadarChart
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatterpolar(
+        r=closeline(-1),
+        theta=categories,
+        line=dict(color="black",width=3),
+        name="対象原稿", 
+        fill="toself",
+        ))
+    
+    fig.add_trace(go.Scatterpolar(
+        r=closeline(-2),
+        theta=categories,
+        line=dict(color="deepskyblue",width=2,dash="dot"),
+        name="有料原稿", 
+        fill="toself",
+        ))
+
+    fig.update_layout(
+        margin=dict(l=64,r=64,b=10,t=10),
+        #paper_bgcolor="lightskyblue",
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0.00,1.00],
+            )),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=0.8,
+            xanchor="left",
+            x=0.01,
+        ),
+        showlegend=True,
+        )
+    
+    return fig
+
 #################### 基礎統計セクション
-if optionPhase == "基礎統計":
+##### page 2 migrated
+generalKeywords = [
+    "正社員","アルバイト","中高年","主婦パート","土日祝休み",
+    "シニア","ハローワーク","深夜バイト","オープニングスタッフ",
+    ]
 
-    import plotly.express as px
-    import plotly.graph_objects as go
+gyosyuKeywordDict = {
+    "介護":[
+        "介護","ホームヘルパー","介護職員","介護スタッフ",
+        "福祉","生活支援員","デイサービス","訪問介護","グループホーム","介護職",
+        "世話人","社会福祉士","夜勤専従","特別養護老人ホーム","就労支援員",
+        ],
+    "物流":[
+        "物流","輸送",
+        ],
+    "販売":[
+        "販売","アパレル販売","販売スタッフ",
+        ],
+    "営業":[
+        "営業","不動産",
+        ],
+    "飲食":[
+        "飲食",
+        ],
+    "事務":[
+        "事務",
+        ],
+    }
 
-    homepageHolder.empty()
-    funStaContainer = funStaHolder.container()
-    funStaContainer.markdown(str_block_css,unsafe_allow_html=True)
-    funStaContainer.markdown("""
-        <h1 style="text-align:start;">
-            基礎<font color="deepskyblue">統計</font>量
-                <sub class="pagetitle">&nbsp;<font color="deepskyblue">F</font>undamental <font color="deepskyblue">S</font>tatistics
-                </sub></h1><hr>
-        """,unsafe_allow_html=True)
+def getSimValue(dic4store,kwlist,targetDoc):
+    for kw in kwlist:
+        simScore = ginzaProcessing(
+            task="pairText",
+            sent1=kw,
+            sent2=targetDoc)["cosine_similarity"]
+        dic4store[kw].append(simScore)
+    return dic4store
 
-    ########## 計算パート
-    txtTitle, txtContent = readUploadedFile()
-
-    #@st.experimental_singleton
-    def statTargetDoc(_txtTitle,_txtContent):
-        statTitle = forSentence(_txtTitle)
-        statContent = forDescrption(_txtContent)
-        return ["dummy0","dummy1",*statTitle,*statContent]
-    
-    targetDocRec = statTargetDoc(txtTitle,txtContent)
-    dfBackground = pd.read_csv(f"./{optionGyosyu}_sponsorPro_stat.csv")
-    lastRowRec = docAveRec(dfBackground)
-
-    with funStaContainer:
-
-        indexRange1 = [2,3,4,-3,-2,-1]
-        indexRange2 = [5,6,7,8,9,10]
-        labelRange = ["dummy1","dummy2","職種字数","職種語数","職種名詞数","原稿字数","原稿語数","原稿語数(異)","原稿名詞数","原稿名詞数(異)","原稿文数","文平均字数","文平均語数","文平均名詞数"]
-        
-        st.markdown(str_block_css,unsafe_allow_html=True)
-        st.markdown(f"""
-            <p>対象原稿職種：<span class="strblockGray">{txtTitle}</span></p>
-            """, unsafe_allow_html=True,)
-        for (i,col) in zip(indexRange1,st.columns(6)):
-            targetNum = np.round(targetDocRec[i],decimals=1)
-            deltaNum = np.round(targetDocRec[i]-lastRowRec[i],decimals=1)
-            col.metric(labelRange[i],targetNum,deltaNum)
-
-        st.markdown(str_block_css,unsafe_allow_html=True)
-        st.markdown(f"""
-            <p>対象原稿内容：<span class="strblockGray">{txtContent[:25]}（以下略）</span></p>
-            """, unsafe_allow_html=True,)
-        for (i,col) in zip(indexRange2,st.columns(6)):
-            targetNum = np.round(targetDocRec[i],decimals=1)
-            deltaNum = np.round(targetDocRec[i]-lastRowRec[i],decimals=1)
-            col.metric(labelRange[i],targetNum,deltaNum)
-
-    funStaContainer.markdown("<hr>", unsafe_allow_html=True)
-
-    ########## グラフ出力パート
-    @st.experimental_singleton
-    def radar_chart(dataRadarChart,categoryRadarChart):       
-        def closeline(i):
-            rlist = dataRadarChart.iloc[i].tolist()
-            rlist.append(rlist[0])
-            rr = rlist
-            return rr
-        
-        categoryRadarChart.append(categoryRadarChart[0])
-        categories = categoryRadarChart
-        
-        fig = go.Figure()
-        
-        fig.add_trace(go.Scatterpolar(
-            r=closeline(-1),
-            theta=categories,
-            line=dict(color="black",width=3),
-            name="対象原稿", 
-            fill="toself",
-            ))
-        
-        fig.add_trace(go.Scatterpolar(
-            r=closeline(-2),
-            theta=categories,
-            line=dict(color="deepskyblue",width=2,dash="dot"),
-            name="有料原稿", 
-            fill="toself",
-            ))
-
-        fig.update_layout(
-            margin=dict(l=64,r=64,b=10,t=10),
-            #paper_bgcolor="lightskyblue",
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0.00,1.00],
-                )),
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=0.8,
-                xanchor="left",
-                x=0.01,
-            ),
-            showlegend=True,
-            )
-        
-        return fig
-
-    lastRowRec_title = lastRowRec[2:5] + lastRowRec[-3:]
-    lastRowRec_content = lastRowRec[5:-3]
-    targetDocRec_title = targetDocRec[2:5] + targetDocRec[-3:]
-    targetDocRec_content = targetDocRec[5:-3]
-
-    # fig2 = px.histogram(df4RadarChart_title["タイトル字数"])
-    # st.plotly_chart(fig2)
-    col1,col2 = st.columns(2)
-
-    with col1:#with funStaContainer:
-        st.markdown("<h4 style='text-align: center; color: black;'>文単位解析</h4>", unsafe_allow_html=True)
-
-        df4RadarChart_title = dfBackground[["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"]]
-        appendDF = pd.DataFrame(
-            [lastRowRec_title,targetDocRec_title],
-            columns=["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"])
-        df4RadarChart_title_med = df4RadarChart_title.append(appendDF)
-        df4RadarChart_title_rank = df4RadarChart_title_med.rank(
-            method="dense",
-            ascending=True,
-            pct=True)
-
-        fig4RadarChart_title = radar_chart(
-            df4RadarChart_title_rank,
-            categoryRadarChart=["職種字数","職種語数","職種名詞数","平均字数","平均語数","平均名詞数"])
-        st.plotly_chart(
-            fig4RadarChart_title,
-            use_container_width=True)
-
-        with st.expander("データ",expanded=True):
-
-            st.dataframe(
-                data = df4RadarChart_title_med[["タイトル字数","タイトル語数","タイトル名詞数","文平均字数","文平均語数","文平均名詞数"]],
-                width = 800,
-                height = 400,) 
-
-    with col2:#with funStaContainer:
-        st.markdown("<h4 style='text-align: center; color: black;'>原稿単位解析</h4>", unsafe_allow_html=True)
-
-        df4RadarChart_content = dfBackground[["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"]]
-        appendDF = pd.DataFrame(
-            [lastRowRec_content,targetDocRec_content],
-            columns=["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"])
-        df4RadarChart_content_med = df4RadarChart_content.append(appendDF)
-        df4RadarChart_content_rank = df4RadarChart_content_med.rank(
-            method="dense",
-            ascending=True,
-            pct=True)
-
-        fig4RadarChart_content = radar_chart(
-            df4RadarChart_content_rank,
-            categoryRadarChart=["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"])
-        st.plotly_chart(
-            fig4RadarChart_content,
-            use_container_width=True)
-
-        with st.expander("データ",expanded=True): 
-
-            st.dataframe(
-                data = df4RadarChart_content_med[["原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数"]].astype(int),
-                width = 800,
-                height = 400,)  
-
-#################### SR
-if optionPhase == "関連度計算":
-    
-    homepageHolder.empty()
-    semRelContainer = semRelHolder.container()
-    semRelContainer.markdown(str_block_css,unsafe_allow_html=True)
-    semRelContainer.markdown("""
-        <h1 style="text-align:start;">
-            キーワード<font color="deepskyblue">関連</font>度
-                <sub class="pagetitle">&nbsp;<font color="deepskyblue">S</font>emantic <font color="deepskyblue">S</font>imilarity
-                </sub></h1>
-        """,unsafe_allow_html=True)
-    txtTitleSR, txtContentSR = readUploadedFile()
-
-    generalKeywords = [
-        "正社員","アルバイト","中高年","主婦パート","土日祝休み",
-        "シニア","ハローワーク","深夜バイト","オープニングスタッフ",
-        ]
-    
-    gyosyuKeywordDict = {
-        "介護":[
-            "介護","ホームヘルパー","介護職員","介護スタッフ",
-            "福祉","生活支援員","デイサービス","訪問介護","グループホーム","介護職",
-            "世話人","社会福祉士","夜勤専従","特別養護老人ホーム","就労支援員",
-            ],
-        "物流":[
-            "物流","輸送",
-            ],
-        "販売":[
-            "販売","アパレル販売","販売スタッフ",
-            ],
-        "営業":[
-            "営業","不動産",
-            ],
-        "飲食":[
-            "飲食",
-            ],
-        "事務":[
-            "事務",
-            ],
-        }
-
-    for kw in gyosyuKeywordDict.keys():
-        if optionGyosyu == kw:
-            selectedGyosyu = gyosyuKeywordDict[kw]
-        elif optionGyosyu == "-":
-            selectedGyosyu = generalKeywords[:5]
-
-    optionKeywords = list(set(generalKeywords + selectedGyosyu))
-
-    ########## 関連度を調べたいキーワードの選択と自由入力
-    with st.form("keywordselect"):
-
-        st.markdown(str_block_css,unsafe_allow_html=True)
-        keyWordSelectForm = st.multiselect(
-            label="キーワード",
-            options=optionKeywords,
-            default=list(set(generalKeywords[:3] + selectedGyosyu[:3])),
-            help="*From Indeed Keyword Ranking.",
-            )
-        additionalKeyWordInputForm = st.text_input(
-            label="追加で調べたいキーワードを入力してください",
-            value="",
-            max_chars=100,
-            placeholder="e.g. keyword1,keyword2,keyword3",
-           )
-
-        srConfirmButton = st.form_submit_button("キーワード確定")
-
-    candidateKeyWord = keyWordSelectForm
-    if additionalKeyWordInputForm != "":
-        candidateKeyWord += additionalKeyWordInputForm.split(",")
-    candidateKeyWord = list(set([e for e in candidateKeyWord if len(e) > 0]))
-
-    ########## 関連度計算フェース
-    def getSimValue(dic4store,kwlist,targetDoc):
-        for kw in kwlist:
-            kw4SimCal = kw+"の求人"
-            simScore = ginzaProcessing(
-                task="pairText",
-                sent1=kw4SimCal,
-                sent2=targetDoc)["cosine_similarity"]
-            dic4store[kw].append(simScore)
-        return dic4store
-
-    if srConfirmButton:
-
-        txtTitleSR, txtContentSR = readUploadedFile()
-        nlpedTarget = ginzaProcessing(task="singleText",sent1=txtContentSR)
-        targetContent4Diff = list(set(nlpedTarget["info_ent"] + nlpedTarget["info_nounChunk"]))
-
-        with st.spinner("データ処理中..."):
-            ########## キーワード確定
-            dictOfSimScores = {kw : [] for kw in candidateKeyWord}
-            dictOfSimScores.update({"職種": []})
-
-            dictOfSim4Entity = {kw : [] for kw in candidateKeyWord}
-            dictOfSim4Entity.update({"NameEntity": []})
-
-        try:
-            sim4EntData = pd.read_csv(f"phase2_Ent_{optionGyosyu}.csv")
-            st.info("CAUTION: デモ用データ")
-        except Exception:
-            with st.spinner("Name Entities Calculating..."):
-
-                dfSponsorProGenkou4NE = pd.read_csv(f"{optionGyosyu}_sponsorPro_text.csv")
-                contraContents4NE = [e.strip() for e in "\n".join(dfSponsorProGenkou4NE["jobDescriptionText"].tolist()).split("\n") if len(e.strip()) > 0]
-                allEntNC = []
-
-                for sentence in contraContents4NE:
-                    res = ginzaProcessing(task="singleText",sent1=sentence)
-                    resEntNC = res["info_ent"] + res["info_nounChunk"]
-                    allEntNC += resEntNC
-                
-                allEntNCNoDup = list(set(allEntNC))
-                dictOfSim4Entity["NameEntity"] += allEntNCNoDup
-
-                for kw in candidateKeyWord:
-                    for ent in allEntNCNoDup:
-                        sim4Ent = ginzaProcessing(task="pairText",sent1=kw+"の求人",sent2=ent)["cosine_similarity"]
-                        dictOfSim4Entity[kw].append(sim4Ent)
-
-                sim4EntData = pd.DataFrame.from_dict(dictOfSim4Entity)
-                sim4EntData.to_csv(f"phase2_Ent_{optionGyosyu}.csv")
-
-        #st.success("なんとかおわったあ")
-
-        try:
-            simScoreData = pd.read_csv(f"phase2_{optionGyosyu}.csv") 
-        except Exception:
-            ########## 関連度計算
-            dictOfSimScores["職種"].append("TARGET")
-            dictOfSimScores = getSimValue(
-                dic4store = dictOfSimScores,
-                kwlist = candidateKeyWord,
-                targetDoc = txtContentSR,)
-            st.success("処理終了")
-
-            dfSponsorProGenkou = pd.read_csv(f"{optionGyosyu}_sponsorPro_text.csv")
-            contraTitles = dfSponsorProGenkou["jobTitle"].tolist()
-            contraContents = dfSponsorProGenkou["jobDescriptionText"].tolist()
-
-            #status_text = st.empty()
-            #loadBarSR = st.progress(0)
-            #loopCount = len(contraTitles)
-
-            for (t,c) in zip(contraTitles,contraContents):
-                dictOfSimScores["職種"].append(t)
-                dictOfSimScores = getSimValue(
-                    dic4store = dictOfSimScores,
-                    kwlist =candidateKeyWord ,
-                    targetDoc = c,)
-
-            simScoreData = pd.DataFrame.from_dict(dictOfSimScores)
-            simScoreData.to_csv(f"phase2_{optionGyosyu}.csv")
-
-    with st.spinner("出力中..."):
-
-        # lambda のほうで ent の出力を追加
-        def getDeviationValue(df,colName):
-            seriesCal = df[colName]
-            seriesCal_std = seriesCal.std(ddof=0)
-            seriesCal_mean = seriesCal.mean()
-            result = seriesCal.map(lambda x: round((x - seriesCal_mean) / seriesCal_std * 10 +50)).astype(int).tolist()
-            return result
-
-        try:
-            for kw in candidateKeyWord:
-                sss = simScoreData[kw].rank(
-                    ascending=True,
-                    pct=True).tolist()[0]
-                sssDV = getDeviationValue(simScoreData,kw)[0]
-
-                expanderLabel = f"【{kw}】偏差値：{int(sssDV)}；順位：{round(sss,4)*100} %"
-
-
-
-                #st.metric("順位",sss)
-                sortedsim4EntData = sim4EntData.sort_values(
-                    by = kw,ascending = False,)
-                entCandidate = sortedsim4EntData["NameEntity"].tolist()
-                entDisplay = [e.strip() for e in entCandidate if e not in targetContent4Diff]
-                kwParsed = ginzaProcessing(task="singleText",sent1=kw)
-                entDisplay = [e for e in entDisplay if kw not in e]
-
-                with open(f"{kw}_save4now.pk","wb") as pklw:
-                    pickle.dump(entDisplay,pklw)
-
-                styledStr = "<p style='text-align:center;line-height:2.5;'>"
-                for ent in entDisplay[:51]:
-                    styledStr += f"<span class='strblockBlue'>{ent}</span>"
-                styledStr += "</p><hr>"
-                with st.expander(expanderLabel):
-                    st.markdown(str_block_css,unsafe_allow_html=True)
-                    st.markdown(styledStr,unsafe_allow_html=True)
-
-                
-        except NameError:
-            st.info("キーワードをまず選択してください。\n")     
-
-def loadCorpus(corpath):
+def loadCorpusHP(corpath):
     dfKaigoSponsor = pd.read_csv(corpath)
+    sentList = []
+    for content in dfKaigoSponsor.jobDescriptionText.tolist():
+        contentSplit = content.split(" ")
+        sentList += contentSplit
     kaigoSponsorSentList = list(
         itertools.chain(
-            *[re.split("[。\n]", article) for article in dfKaigoSponsor.jobDescriptionText.tolist()]
+            *[article.split(" ") for article in dfKaigoSponsor.jobDescriptionText.tolist()]
             ))
-    kaigoSponsorSentSet = [e.strip() for e in set(kaigoSponsorSentList) if len(e) > 0]
-    return kaigoSponsorSentSet
-
-#################### Expression Recommandation    
-if optionPhase == "原稿推薦表現":# and task_submitted:
-
-    homepageHolder.empty()    
-    expRecContainer = expRecHolder.container()
-    expRecContainer.markdown(str_block_css,unsafe_allow_html=True)
-    expRecContainer.markdown("""
-        <h1 style="text-align:start;">
-            原稿<font color="deepskyblue">推薦</font>表現
-                <sub class="pagetitle">&nbsp;<font color="deepskyblue">R</font>ecommended <font color="deepskyblue">E</font>xpression
-                </sub></h1><hr>
-        """,unsafe_allow_html=True)
-
-
-    if optionGyosyu == "-":
-        st.info("業種を選んでください")
-    else:
-        gyoSyuSents = loadCorpus(f"{optionGyosyu}_sponsor_text.csv")
-    
-    with open("介護職員_save4now.pk","rb") as pklr:
-        termlist = pickle.load(pklr)
-
-    phase3Candidate = termlist[:51]
-
-    with st.form("phase3"):
-        phase3Form = st.multiselect(
-            label="これらの関連キーワードでよろしいですか",
-            options = phase3Candidate,
-            default = phase3Candidate[:11],
-            help = "数量やグループ等の調整が可能",
-        )
-        phase3ConfirmButton = st.form_submit_button("関連語確定")
-
-    phase3Term = phase3Form
-    if phase3ConfirmButton:
-        for t in phase3Term:
-            with st.expander(f"{t}を含む表現"):
-
-                para4Display = ""
-
-                for s in gyoSyuSents:
-                    if t in s:
-                        sent4Display = f"<div class='parblock'>{s}</div><p></p>"
-                        para4Display += sent4Display
-                
-                para4Display +="<hr>"
-                st.markdown(str_block_css,unsafe_allow_html=True)
-                st.markdown(para4Display,unsafe_allow_html=True)
+    kaigoSponsorSentSet = [noSymbolic(e.strip()) for e in set(kaigoSponsorSentList) if len(e) > 0]
+    kaigoSponsorSentSet = list(set(kaigoSponsorSentSet))
+    return list(range(1000))
 
 
 
-
-########## GPT-2 rinna モデル
-      
-def jobPostingGenerator(expression):
-
-    payload = {
-        "inputs" : expression,
-        "parameters" : {
-            "top_k" : 100,
-            "return_full_text" : False,
-            "num_return_sequences" : 10,
-            },
-        }
-
-    response = client.invoke_endpoint(
-        EndpointName = 'rinnaJapaneseGPT2Medium',
-        ContentType = 'application/json',
-        Body = json.dumps(payload),
-        )
-
-    result = json.loads(response["Body"].read().decode())
-    resultTxtList = [e["generated_text"] for e in result]
-
-    # resultTxtList = []
-    # for e in result:
-        # resultTxtList += [e2 for e2 in e["generated_text"].split("。")[:-1] if len(e2) > 2]
-
-    return resultTxtList
-
-
-#################### JOB POSTING GENERATION    
-if optionPhase == "原稿生成β":
-
-    homepageHolder.empty()    
-    jobGenContainer = jobGenHolder.container()
-    jobGenContainer.markdown(str_block_css,unsafe_allow_html=True)
-    jobGenContainer.markdown("""
-        <h1 style="text-align:start;">
-            原稿<font color="deepskyblue">生成</font>表現
-                <sub class="pagetitle">&nbsp;<font color="deepskyblue">J</font>ob <font color="deepskyblue">P</font>osting <font color="deepskyblue">G</font>eneration
-                </sub></h1>
-        """,unsafe_allow_html=True)
-    
-    ########## sentence input form
-    with jobGenContainer.form("jobgenform"):
-
-        leader = st.text_area(
-            label = "",
-            max_chars = 200,
-            help = "rinna GPT-2",
-            placeholder = "表現に困っている要望・アピールポイント等を入力してください",
-            )
-        generatedLength = st.slider(
-            label = "文字数を決めてください",
-            min_value = 1,
-            max_value = 256,
-            value = (3,100),
-        )
-        
-        jobGenSubmitted = st.form_submit_button("生成")
-
-    if jobGenSubmitted:
-
-        generatedTxtList = jobPostingGenerator(leader)
-        for paragraph in generatedTxtList:
-            st.markdown(f"""
-                <div class="parblock">{paragraph}</div><p></p>
-                """,unsafe_allow_html=True)
-
-
-
-            
+def crawling4SpecificSite(targetUrl,site):
+    if site == "zensyo":
+        # bs4 + requests
+        pass
+    elif site == "リクオプ":
+        pass
+    elif site == "ジョブオプ":
+        pass
+    elif site == "AirWork":
+        pass

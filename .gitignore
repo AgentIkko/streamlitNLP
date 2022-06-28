@@ -1,6 +1,11 @@
 *.pkl
+*.pk
 *.png
 *.log
 *.out
+*.csv
+*.ipynb
 .ipynb_checkpoints/
 data_pandas/.ipynb_checkpoints/
+bs4lambda/
+__pycache__/
