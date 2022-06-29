@@ -32,6 +32,7 @@ def aboutUs():
 aboutUs()
 
 try:
+    del st.session_state["url"]
     del st.session_state["statTargetTxt"]
     del st.session_state["statBackgroundAvg"]
     del st.session_state["industry"]

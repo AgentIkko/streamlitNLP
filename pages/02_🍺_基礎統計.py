@@ -15,7 +15,7 @@ from Home_Page import *
 ########### sidebar & settings 
 st.set_page_config(
     page_title="AIRCreW - Fundamental Statistics",
-    page_icon="./favicon.ico",
+    page_icon="./materials/favicon.ico",
     layout="centered",
     initial_sidebar_state="auto",
     )

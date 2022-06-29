@@ -56,32 +56,55 @@ if ("industry" not in st.session_state) or (st.session_state.industry == "-") or
 
 gyoSyuSents = loadCorpus(f"{st.session_state.industry}_sponsor_text.csv")
 
-with open("介護スタッフ_save4now.pk","rb") as pklr:
-    termlist = pickle.load(pklr)
+# with open("介護スタッフ_save4now.pk","rb") as pklr:
+#     termlist = pickle.load(pklr)
+# phase3Candidate = termlist[:51]
 
-phase3Candidate = termlist[:51]
+phase3kwSelect = st.radio(
+    label="",
+    options=st.session_state["phase2candidateKW"],
+    horizontal=True,
+    )
+
+with open(f"{phase3kwSelect}_save4now.pk","rb") as pklr:
+    termlist = pickle.load(pklr)
+phase3Candidate = [e for e in termlist[:101] if e != "Unnamed: 0"]
 
 with st.form("phase3"):
+
     phase3Form = st.multiselect(
         label="これらの関連キーワードでよろしいですか",
         options = phase3Candidate,
-        default = phase3Candidate[:11],
-        help = "数量やグループ等の調整が可能",
+        default = phase3Candidate[:6],
+        help = "使い方説明施工中",
     )
     phase3ConfirmButton = st.form_submit_button("関連語確定")
 
 phase3Term = phase3Form
+
 if phase3ConfirmButton:
+
     for t in phase3Term:
-        with st.expander(f"{t}を含む表現"):
 
-            para4Display = ""
+        para4List = []
+        for s in gyoSyuSents:
+            if (t in s) and (s.count(" ") < 5):
+                para4List.append(s)
 
-            for s in gyoSyuSents:
-                if t in s:
+        para4ListSorted = sorted(
+            para4List,
+            key=len,
+            reverse=True)
+        
+        if len(para4ListSorted) > 0:
+
+            with st.expander(f"{t}を含む表現"):
+
+                para4Display = ""
+                for s in para4ListSorted[:51]:
                     sent4Display = f"<div class='parblock'>{s}</div><p></p>"
                     para4Display += sent4Display
             
-            para4Display +="<hr>"
-            st.markdown(str_block_css,unsafe_allow_html=True)
-            st.markdown(para4Display,unsafe_allow_html=True)
+                para4Display +="<hr>"
+                st.markdown(str_block_css,unsafe_allow_html=True)
+                st.markdown(para4Display,unsafe_allow_html=True)

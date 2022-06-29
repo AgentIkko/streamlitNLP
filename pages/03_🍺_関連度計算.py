@@ -74,12 +74,14 @@ with st.form("phase2_KeywordSelect"):
         label="キーワード候補",
         options=optionKeywords,
         default=list(set(generalKeywords[:2] + selectedGyosyu[:2])),
+        help="DEMO用キーワード：介護, 正社員",
         )
     additionalKeyWordInputForm = st.text_input(
         label="追加で調べたいキーワードを入力してください",
         value="",
         max_chars=64,
         placeholder="e.g. keyword1,keyword2,keyword3",
+        help="DEMO時は入力しないでください",
         )
 
     srConfirmButton = st.form_submit_button("キーワード確定")
@@ -149,15 +151,24 @@ if srConfirmButton:
             ##########
 
     try:
-        simScoreData = pd.read_csv(f"phase2_{st.session_state.industry}.csv") 
+        simScoreData = pd.read_csv(f"phase2_Doc_{st.session_state.industry}.csv") 
     except Exception:
         ########## 関連度計算
+        st.info("原稿順位計算中...")
+        dictOfSimScores = {kw: [] for kw in candidateKeyWord}
+        dictOfSimScores.update({"職種":[]})
+
         dictOfSimScores["職種"].append("TARGET")
-        dictOfSimScores = getSimValue(
-            dic4store = dictOfSimScores,
-            kwlist = candidateKeyWord,
-            targetDoc = txtContentSR,)
-        st.success("処理終了")
+
+        for kw in candidateKeyWord:
+            docSimScore = ginzaProcessing(
+                task = "pairText",
+                sent1 = kw,
+                sent2 = txtContentSR,
+            )["cosine_similarity"]
+            dictOfSimScores[kw].append(docSimScore)
+
+        st.success("対象原稿処理終了")
 
         dfSponsorProGenkou = pd.read_csv(f"{st.session_state.industry}_sponsorPro_text.csv")
         contraTitles = dfSponsorProGenkou["jobTitle"].tolist()
@@ -168,14 +179,19 @@ if srConfirmButton:
         #loopCount = len(contraTitles)
 
         for (t,c) in zip(contraTitles,contraContents):
+
             dictOfSimScores["職種"].append(t)
-            dictOfSimScores = getSimValue(
-                dic4store = dictOfSimScores,
-                kwlist =candidateKeyWord ,
-                targetDoc = noSymbolic(c),)
+
+            for kw in candidateKeyWord:
+                docSimScoreContra = ginzaProcessing(
+                    task = "pairText",
+                    sent1 = kw,
+                    sent2 = noSymbolic(c),
+                )["cosine_similarity"]
+                dictOfSimScores[kw].append(docSimScoreContra)
 
         simScoreData = pd.DataFrame.from_dict(dictOfSimScores)
-        simScoreData.to_csv(f"phase2_{st.session_state.industry}.csv")
+        simScoreData.to_csv(f"phase2_Ent_{st.session_state.industry}.csv")
 
 ##############################
 
@@ -209,11 +225,11 @@ for kw in candidateKeyWord:
     kwParsed = ginzaProcessing(task="singleText",sent1=kw)
     entDisplay = [e for e in entDisplay if kw not in e]
 
-    #with open(f"{kw}_save4now.pk","wb") as pklw:
-    #    pickle.dump(entDisplay,pklw)
+    with open(f"{kw}_save4now.pk","wb") as pklw:
+        pickle.dump(entDisplay,pklw)
 
     styledStr = "<p style='text-align:center;line-height:2.5;'>"
-    for ent in entDisplay[:51]:
+    for ent in entDisplay[:101]:
         styledStr += f"<span class='strblockBlue'>{ent}</span>"
     styledStr += "</p><hr>"
     with st.expander(expanderLabel):

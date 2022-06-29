@@ -42,6 +42,16 @@ str_block_css = f"""
             margin          :   5px;
             display         :   inline-block;
         }}
+        span.strblockIndeed{{
+            padding         :   6px;
+            border          :   1.5px solid gray;
+            border-radius   :   8px;
+            /*background      :   lightskyblue;*/
+            font-size       :   70%;
+            font-weight     :   bold;
+            margin          :   5px;
+            display         :   inline-block;
+        }}
         div.parblock{{
             padding         :   8px;
             /*border          :   1px solid lightskyblue;*/
@@ -343,7 +353,8 @@ gyosyuKeywordDict = {
         ],
     }
 
-def getSimValue(dic4store,kwlist,targetDoc):
+def getSimValue(dic4store,kwlist,targetTitle,targetDoc):
+    dic4store["職種"].append()
     for kw in kwlist:
         simScore = ginzaProcessing(
             task="pairText",
