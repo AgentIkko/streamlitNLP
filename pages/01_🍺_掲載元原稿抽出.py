@@ -1,3 +1,4 @@
+from curses import keyname
 from io import StringIO
 from PIL import Image
 from collections import Counter
@@ -108,7 +109,7 @@ elif "url" in st.session_state:
 
     # for k in st.session_state["scrapedItem"]:
     #     st.write(st.session_state[k])
-    imageLen = len(st.session_state["images"])
+    st.info("スクレイピングされたデータ利用中")
     # for i,col in enumerate(st.columns(imageLen)):
     #     with col: st.image(st.session_state["images"][i])
 
@@ -246,15 +247,45 @@ def indeedFormat():
 
 
 # st.info("indeed（スマホアプリ）上の疑似表示プレビュー")
+imageLen = len(st.session_state["images"])
+for i,col in enumerate(st.columns(imageLen)):
+    with col: st.image(st.session_state["images"][i])
+
+ruleBook = {
+    "rule-01"    :   "単独の業務形態",
+    "rule-02"    :   "タイトル2行以内",
+    "rule-03"    :   "タイトルのフォーマット：[施設]の[職種]",
+    "rule-04"    :   "駅記載",
+    "rule-05"    :   "住所記載",
+}
+
+if "ruleBook" not in st.session_state:
+    st.session_state["ruleBook"] = ruleBook
+
+
 col1, col2 = st.columns(2)
 
 try:
     with col1:
+
         indeedMimic = st.container()
         indeedFormat()
+
     with col2:
-        for i in range(imageLen):
-            st.image(st.session_state["images"][i])
+
+        with st.form("check4MimicPosting"):
+
+            for k,v in st.session_state["ruleBook"].items():
+                ruleFlag = st.checkbox(label=v,key=k)
+
+            ruleSubmit = st.form_submit_button(label="Check !")
+        
+        if ruleSubmit:
+            ruleFlagList = [e for e in st.session_state if e.startswith("rule-")]
+            for r in ruleFlagList:
+                if not st.session_state[r]:
+                    st.write(st.session_state["ruleBook"][r])
+
 except KeyError:
     st.info("URLを入力して原稿を抽出してください。")
     st.stop()

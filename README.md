@@ -15,13 +15,13 @@
 - auroraDB
 - ~~sagemaker で preprocessing~~
 - ~~smartphone preview page~~
-- ~~~50k words に制限~~
+- ~~50k words に制限~~
 - phase0 on_click change -> flag control
 - ~~400k word / keyword はだいたい 90 分~~
 - ~~freq >= 5: 18600 words~~
 
 ### cache系
-- multipage と session_state で解決 
+- multipage と session_state でだいたい解決 
 - ~~session~~
 - ~~upload ファイル反映するには memo, singleton は使えないが、計算わりと遅い~~
 - ~~なんで memo か singleton をつけて、upload ファイルのデータをクリアできるモジュールをつける~~
