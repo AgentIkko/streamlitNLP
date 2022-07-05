@@ -9,8 +9,11 @@ import numpy as np
 import boto3
 from boto3.session import Session
 from Home_Page import *
+from boto3.dynamodb.conditions import Attr,Key
+from decimal import Decimal
 
 ########### なぜか import できない func
+dynamodb = boto3.Session(profile_name="genikko-profile",).resource("dynamodb",region_name="ap-northeast-1",)
 
 def kwInTargetFile(_content):
 
@@ -19,6 +22,13 @@ def kwInTargetFile(_content):
     kwInContent = [e for e in list(set(nounInContent + nounChunkInContent)) if len(e) > 1]
 
     return kwInContent
+
+def getDeviationValue(dfCol):
+    seriesCal = dfCol
+    seriesCal_std = seriesCal.std(ddof=0)
+    seriesCal_mean = seriesCal.mean()
+    result = seriesCal.map(lambda x: round((x - seriesCal_mean) / seriesCal_std * 10 +50)).astype(int).tolist()
+    return result
 
 ########################################
 
@@ -30,7 +40,7 @@ hide_streamlit_style = """
             """
 st.set_page_config(
     page_title="AIRCreW - Semantic Similarity",
-    page_icon="./favicon.ico",
+    page_icon="./materials/favicon.ico",
     layout="centered",
     initial_sidebar_state="auto",
     )
@@ -73,20 +83,45 @@ with st.form("phase2_KeywordSelect"):
     keyWordSelectForm = st.multiselect(
         label="キーワード候補",
         options=optionKeywords,
-        default=list(set(generalKeywords[:2] + selectedGyosyu[:2])),
-        help="DEMO用キーワード：介護, 正社員",
+        default=list(set(generalKeywords[:2] + selectedGyosyu[:3])),
+        help="偏差値計算済みキーワード：正社員 | アルバイト | 飲食 | キッチンスタッフ | 調理補助 | シニア | 主婦 | 大学生",
         )
     additionalKeyWordInputForm = st.text_input(
         label="追加で調べたいキーワードを入力してください",
         value="",
         max_chars=64,
         placeholder="e.g. keyword1,keyword2,keyword3",
-        help="DEMO時は入力しないでください",
+        help="計算時間の関係でDEMO時は入力しないでください",
         )
 
     srConfirmButton = st.form_submit_button("キーワード確定")
 
-if srConfirmButton:
+if not srConfirmButton:
+    st.info("キーワードを選択してください。\n")
+    st.stop()
+
+# if srConfirmButton:
+else:
+    condition4DocSim = gyosyuKeywordDict[st.session_state.industry]
+    dynamoTableRead = dynamodb.Table("jobposting_indeed")
+
+    itemsFromDB = []
+    for kw in condition4DocSim:
+        res = dynamoTableRead.query(
+            KeyConditionExpression=Key('condition').eq(kw),
+            )
+        itemsFromDB.extend(res['Items'])
+        while "LastEvaluatedKey" in res:
+            res = dynamoTableRead.query(
+                KeyConditionExpression=Key('condition').eq(kw),
+                ExclusiveStartKey=res["LastEvaluatedKey"],
+                )
+            itemsFromDB.extend(res['Items'])
+    dfSpecificField = pd.DataFrame(itemsFromDB)
+
+    # dataframe のやり方
+    # prevEntDFWhole = pd.read_csv("./rawData/indeedPrev.csv")
+    # dfSpecificField = prevEntDFWhole.query('condition in @condition4DocSim')
 
     candidateKeyWord = keyWordSelectForm
     if additionalKeyWordInputForm != "":
@@ -98,135 +133,130 @@ if srConfirmButton:
     st.session_state.phase2candidateKW = candidateKeyWord
 
     ########################################
+    with st.spinner("Loading ..."):
+        
+        nlpedTarget = ginzaProcessing(task="singleText",sent1=txtContentSR)
+        kwInTarget = kwInTargetFile(_content=nlpedTarget)
 
-    nlpedTarget = ginzaProcessing(task="singleText",sent1=txtContentSR)
-    kwInTarget = kwInTargetFile(_content=nlpedTarget)
+        if "similarityPairwise" not in st.session_state:
 
-    
+            st.session_state.similarityPairwise = {}
+
+            dynoTableRead2 = dynamodb.Table("similarity_pairwise_keyword")
+            resPairwiseKW = dynoTableRead2.scan()
+            dataPairwiseKW = resPairwiseKW["Items"]
+            while "LastEvaluatedKey" in resPairwiseKW:
+                resPairwiseKW = dynoTableRead2.scan(ExclusiveStartKey=resPairwiseKW["LastEvaluatedKey"])
+                dataPairwiseKW.extend(resPairwiseKW["Items"])
+            prevSimDB = pd.DataFrame(dataPairwiseKW).set_index("Entity")
+            st.session_state["similarityPairwise"] = prevSimDB
+
+        st.success("Database loaded 1/2 ...")
+
+        # with open("./rawData/prevPairwiseSimilarity.pkl","rb") as fr:
+        #    prevDictSimScore4Entity = pickle.load(fr)
+        # prevSimScore4Entity = pd.DataFrame.from_dict(prevDictSimScore4Entity)
+
+        if "similarityDoc" not in st.session_state:
+
+            st.session_state.similarityDoc = {}
+
+            dynoTableRead3 = dynamodb.Table("similarity_doc_indeed")
+            resDocSim = dynoTableRead3.scan()
+            dataDocSim = resDocSim["Items"]
+            while "LastEvaluatedKey" in resDocSim:
+                resDocSim = dynoTableRead3.scan(ExclusiveStartKey=resDocSim["LastEvaluatedKey"])
+                dataDocSim.extend(resDocSim["Items"])
+            prevSimDocDB = pd.DataFrame(dataDocSim)#.set_index("uid")
+            st.session_state["similarityDoc"] = prevSimDocDB
+
+        st.success("Database loaded 2/2 ...")
+
+##############################
+prevSimScore4Entity = st.session_state["similarityPairwise"].applymap(lambda x: float(str(x)) if type(x) == Decimal else x)
+prevSimScore4Doc = st.session_state["similarityDoc"].applymap(lambda x: float(str(x)) if type(x) == Decimal else x)
+
+if "phase2TopEnt" not in st.session_state:
+    st.session_state["phase2TopEnt"] = {}
+st.session_state["phase2TopEnt"] = {kw:[] for kw in candidateKeyWord}
+
+if "updatedDocSim" not in st.session_state:
+    st.session_state["updatedDocSim"] = {}
+
+for kw in candidateKeyWord:
+
     try:
-        # 修正必要
-        prevSimScore4Entity = pd.read_csv(f"phase2EntityIn{st.session_state.industry}.csv",index_col="keyword").T
-        # st.dataframe(prevSimScore4Entity)
-        # prevSimScore4Entity = pd.read_csv(f"phase2_Ent_{st.session_state.industry}.csv")
+        rankingDoc = prevSimScore4Doc[kw].tolist()
 
-        st.warning("CAUTION: 計算済みデータを利用しております。")
+    except KeyError:
 
-    except Exception:
-        with st.spinner("キーワードの関連度を計算しております。少々お待ちください。"):
-            ##########
-            st.info("過去原稿を解析中...")
-            prevEntDF = pd.read_csv(f"{st.session_state.industry}_sponsorPro_text.csv")
+        if kw in st.session_state["updatedDocSim"].keys():
+            rankingDoc = st.session_state["updatedDocSim"][kw]
 
-            # 修正必要
-            prevSentCorpus = []
-            for e in prevEntDF["jobDescriptionText"].tolist():
-                eList = e.strip().split("\n")
-                for ee in eList:
-                    eeStr = noSymbolic(ee).strip()
-                    if len(eeStr) > 0:
-                        prevSentCorpus.append(eeStr)
+        else:
+            contraUID = dfSpecificField["uid"].tolist()
+            contraTitlesKW = dfSpecificField["jobTitle"].tolist()
+            contraContentsKW = dfSpecificField["jobContentCleared"].apply(eval).tolist()
 
-            allEntNC = []
-            st.write(len(prevSentCorpus))
+            prevSimScore4DocUpdate = pd.DataFrame(columns=["uid",kw])
+            prevSimScore4DocUpdate["uid"] = dfSpecificField["uid"]
 
-            for sentence in prevSentCorpus:
-                res = ginzaProcessing(task="singleText",sent1=sentence)
-                resEntNC = kwInTargetFile(res)
-                allEntNC += resEntNC
-            
-            allEntNC = list(set(allEntNC))[:1000]
+            barText = st.empty()
+            myBar = st.progress(0)
+            loopLength = len(contraUID)
 
-            dictOfSim4Entity = {ent : [] for ent in allEntNC}
-            dictOfSim4Entity.update({"keyword": []})
-            dictOfSim4Entity["keyword"] += candidateKeyWord
+            for barI,(u,t,c) in enumerate(zip(contraUID,contraTitlesKW,contraContentsKW)):
 
-            for ent in allEntNC:
-                for kw in candidateKeyWord:
-                    sim4Ent = ginzaProcessing(task="pairText",sent1=ent,sent2=kw)["cosine_similarity"]
-                    dictOfSim4Entity[ent].append(sim4Ent)
-
-            sim4EntData = pd.DataFrame.from_dict(dictOfSim4Entity)
-            sim4EntData.to_csv(f"phase2EntityIn{st.session_state.industry}.csv")
-            st.success("解析完了🎈")
-            ##########
-
-    try:
-        simScoreData = pd.read_csv(f"phase2_Doc_{st.session_state.industry}.csv") 
-    except Exception:
-        ########## 関連度計算
-        st.info("原稿順位計算中...")
-        dictOfSimScores = {kw: [] for kw in candidateKeyWord}
-        dictOfSimScores.update({"職種":[]})
-
-        dictOfSimScores["職種"].append("TARGET")
-
-        for kw in candidateKeyWord:
-            docSimScore = ginzaProcessing(
-                task = "pairText",
-                sent1 = kw,
-                sent2 = txtContentSR,
-            )["cosine_similarity"]
-            dictOfSimScores[kw].append(docSimScore)
-
-        st.success("対象原稿処理終了")
-
-        dfSponsorProGenkou = pd.read_csv(f"{st.session_state.industry}_sponsorPro_text.csv")
-        contraTitles = dfSponsorProGenkou["jobTitle"].tolist()
-        contraContents = dfSponsorProGenkou["jobDescriptionText"].tolist()
-
-        #status_text = st.empty()
-        #loadBarSR = st.progress(0)
-        #loopCount = len(contraTitles)
-
-        for (t,c) in zip(contraTitles,contraContents):
-
-            dictOfSimScores["職種"].append(t)
-
-            for kw in candidateKeyWord:
                 docSimScoreContra = ginzaProcessing(
                     task = "pairText",
                     sent1 = kw,
-                    sent2 = noSymbolic(c),
+                    sent2 = "\n".join(c),
                 )["cosine_similarity"]
-                dictOfSimScores[kw].append(docSimScoreContra)
 
-        simScoreData = pd.DataFrame.from_dict(dictOfSimScores)
-        simScoreData.to_csv(f"phase2_Ent_{st.session_state.industry}.csv")
+                prevSimScore4DocUpdate.loc[prevSimScore4DocUpdate["uid"]==u,kw] = docSimScoreContra
 
-##############################
+                barText.text(f"処理中　{round(((barI+1)/loopLength)*100,2)}%：{t[:26]}")
+                myBar.progress(min((barI+1)/loopLength,100))
 
-# lambda のほうで ent の出力を追加
-def getDeviationValue(df,colName):
-    seriesCal = df[colName]
-    seriesCal_std = seriesCal.std(ddof=0)
-    seriesCal_mean = seriesCal.mean()
-    result = seriesCal.map(lambda x: round((x - seriesCal_mean) / seriesCal_std * 10 +50)).astype(int).tolist()
-    return result
+            rankingDoc = prevSimScore4DocUpdate[kw].tolist()
+            st.session_state["updatedDocSim"][kw] = rankingDoc
+            
+            ##### db 書き込み
+            dynamoTableUpdateDocSim = dynamodb.Table("similarity_doc_indeed")
+            dfWrite = prevSimScore4DocUpdate.replace(to_replace=np.nan,value="").applymap(lambda x: Decimal(str(x)) if type(x) == float else x)
+            for item in dfWrite.to_dict(orient="records"):
+                options = {
+                    "Key"                       :   {"uid"  :   item["uid"]},
+                    "UpdateExpression"          :   "set #kw = :kw",
+                    "ExpressionAttributeNames"  :   {"#kw"  :   kw},
+                    "ExpressionAttributeValues" :   {":kw"  :   item[kw]},
+                }
+                dynamoTableUpdateDocSim.update_item(**options)
 
-if not srConfirmButton:
-#if (not candidateKeyWord) or (candidateKeyWord == []):
-    st.info("キーワードを選択してください。\n")
-    st.stop()
+    ##### 対象原稿
+    docSimScore = ginzaProcessing(
+        task = "pairText",
+        sent1 = kw,
+        sent2 = txtContentSR,
+    )["cosine_similarity"]
 
-for kw in candidateKeyWord:
-    sss = simScoreData[kw].rank(
+    rankingDoc.append(docSimScore)
+
+    sss = pd.Series(rankingDoc).rank(
         ascending=True,
-        pct=True).tolist()[0]
-    sssDV = getDeviationValue(simScoreData,kw)[0]
+        pct=True).tolist()[-1] # targetを取ってきてるので tail
+    sssDV = getDeviationValue(pd.Series(rankingDoc))[-1]
 
-    expanderLabel = f"【{kw}】偏差値：{int(sssDV)}；順位：{round(sss,4)*100} %"
+    expanderLabel = f"【{kw}】偏差値：{int(sssDV)}；順位：{round(sss*100,2)} %"
 
-    #st.metric("順位",sss)
     sortedsim4EntData = prevSimScore4Entity.sort_values(
         by = kw, ascending = False,)
-    # entCandidate = sortedsim4EntData["NameEntity"].tolist()
     entCandidate = sortedsim4EntData.index.values
-    entDisplay = [e.strip() for e in entCandidate if e not in kwInTarget]
-    kwParsed = ginzaProcessing(task="singleText",sent1=kw)
-    entDisplay = [e for e in entDisplay if kw not in e]
+    entDisplay = [e.strip() for e in entCandidate if (e not in kwInTarget) and (kw not in e)]
+    # entDisplay = [e for e in entDisplay if kw not in e]
 
-    with open(f"{kw}_save4now.pk","wb") as pklw:
-        pickle.dump(entDisplay,pklw)
+    st.session_state["phase2TopEnt"][kw] = entDisplay[:256]
+
 
     styledStr = "<p style='text-align:center;line-height:2.5;'>"
     for ent in entDisplay[:101]:
@@ -235,5 +265,3 @@ for kw in candidateKeyWord:
     with st.expander(expanderLabel):
         st.markdown(str_block_css,unsafe_allow_html=True)
         st.markdown(styledStr,unsafe_allow_html=True)
-
-            

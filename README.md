@@ -11,8 +11,14 @@
     - entity: 計算にプログレスバー追加
 
 ### 最優先
+- uid と condition の対応テーブル
+- ~~主婦、シニア、学生~~
+- ~~基礎統計パート動かせる（csvの計算）~~
+- report
+- download button (data scraping)
+- ~~forDescrption 綴りi漏れ~~
 - ~~multipage app 化~~
-- auroraDB
+- ~~auroraDB 高すぎる → dynamoDB~~
 - ~~sagemaker で preprocessing~~
 - ~~smartphone preview page~~
 - ~~50k words に制限~~

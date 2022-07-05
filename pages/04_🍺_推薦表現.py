@@ -18,7 +18,7 @@ hide_streamlit_style = """
             """
 st.set_page_config(
     page_title="AIRCreW - Recommended Expression",
-    page_icon="./favicon.ico",
+    page_icon="./materials/favicon.ico",
     layout="centered",
     initial_sidebar_state="auto",
     )
@@ -54,7 +54,10 @@ if ("industry" not in st.session_state) or (st.session_state.industry == "-") or
     st.error("業種を選択してください。")
     st.stop()
 
-gyoSyuSents = loadCorpus(f"{st.session_state.industry}_sponsor_text.csv")
+# DB入れる？
+phase3df = pd.read_csv("./rawData/indeedPrev.csv")
+gyoSyuSents = set(list(itertools.chain(*phase3df["jobContentCleared"].apply(eval).tolist())))
+# gyoSyuSents = loadCorpus(f"{st.session_state.industry}_sponsor_text.csv")
 
 # with open("介護スタッフ_save4now.pk","rb") as pklr:
 #     termlist = pickle.load(pklr)
@@ -62,20 +65,18 @@ gyoSyuSents = loadCorpus(f"{st.session_state.industry}_sponsor_text.csv")
 
 phase3kwSelect = st.radio(
     label="",
-    options=st.session_state["phase2candidateKW"],
+    options=st.session_state["phase2TopEnt"].keys(),
     horizontal=True,
     )
 
-with open(f"{phase3kwSelect}_save4now.pk","rb") as pklr:
-    termlist = pickle.load(pklr)
-phase3Candidate = [e for e in termlist[:101] if e != "Unnamed: 0"]
+phase3Candidate = st.session_state["phase2TopEnt"][phase3kwSelect][:51]
 
 with st.form("phase3"):
 
     phase3Form = st.multiselect(
         label="これらの関連キーワードでよろしいですか",
         options = phase3Candidate,
-        default = phase3Candidate[:6],
+        default = phase3Candidate[:10],
         help = "使い方説明施工中",
     )
     phase3ConfirmButton = st.form_submit_button("関連語確定")
@@ -97,6 +98,10 @@ if phase3ConfirmButton:
             reverse=True)
         
         if len(para4ListSorted) > 0:
+
+            if t == "バイト":
+                para4ListSorted = [e for e in para4ListSorted if (e.find("アルバイト")==-1)]
+            # para4ListSorted = [e for e in para4ListSorted if (e.find(t)==-1)]
 
             with st.expander(f"{t}を含む表現"):
 

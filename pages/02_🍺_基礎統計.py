@@ -11,6 +11,19 @@ from boto3.session import Session
 import plotly.express as px
 import plotly.graph_objects as go
 from Home_Page import *
+from boto3.dynamodb.conditions import Attr,Key
+from decimal import Decimal
+
+dynamodb = boto3.Session(profile_name="genikko-profile",).resource("dynamodb",region_name="ap-northeast-1",)
+dynamoTableStats = dynamodb.Table("statistics_doc_indeed")
+
+def docAveRec(df):
+
+    dfStatMean = df.mean().tolist()[:-3]
+    dfStatMean4Rec = ["dummy0","dummy1"] + dfStatMean + multiAddDiv(df)
+    st.session_state.statBackgroundAvg = dfStatMean4Rec
+
+    return dfStatMean4Rec
 
 ########### sidebar & settings 
 st.set_page_config(
@@ -36,21 +49,51 @@ funStaContainer.markdown("""
 
 ########## いろいろなデータをロードするパート
 with st.spinner("対象原稿解析中..."):
-    if "phase1DataLoaded" not in st.session_state:
-        st.session_state.phase1DataLoaded = False
-    try:
-        targetTitle, targetContent = titleContent(st.session_state.target_file)
-    except AttributeError:
-        st.error("ファイルをアップロードしてください。")
-        st.stop()
-    st.session_state.phase1DataLoaded = True
+
+    #if "phase1DataLoaded" not in st.session_state:
+    #    st.session_state.phase1DataLoaded = False
+    if ("statTargetTxt" not in st.session_state) or (st.session_state["statTargetTxt"] == "fileChanged"):
+        try:
+            targetTitle, targetContent = titleContent(st.session_state.target_file)
+        except AttributeError:
+            st.error("ファイルをアップロードしてください。")
+            st.stop()
 
 with st.spinner("上位原稿群解析中..."):
-    if "statTargetTxt" not in st.session_state:
-        targetDocRec = statTargetDoc(targetTitle,targetContent)
-        dfBackground = pd.read_csv(f"./介護_sponsorPro_stat.csv")
+
+    if ("statTargetTxt" not in st.session_state) or (st.session_state["statTargetTxt"] == "fileChanged"):
+
+        with st.spinner("データベース接続中..."):
+            targetDocRec = statTargetDoc(targetTitle,targetContent)
+
+        resStats = dynamoTableStats.scan()
+        dataStats = resStats["Items"]
+        while "LastEvaluatedKey" in dataStats:
+            resStats = dynamoTableStats.scan(ExclusiveStartKey=resStats["LastEvaluatedKey"])
+            dataStats.extend(resStats["Items"])
+        dfSpecificField = pd.DataFrame(dataStats)
+        # dfBackground = pd.read_csv(f"./rawData/prev_Stat_{st.session_state.industry}.csv")
+        uidConditonTable = pd.read_csv("rawData/uidTitleConditon.csv")
+        condition4DocSim = gyosyuKeywordDict[st.session_state.industry]
+
+        dfSpecificUID = uidConditonTable.query('condition in @condition4DocSim')
+        specificUID = dfSpecificUID["uid"].tolist()
+
+        dfBackground = dfSpecificField.query(
+            'uid in @specificUID'
+            ).applymap(
+                lambda x: float(str(x)) if type(x) == Decimal else x
+                )
+        dfBackground = dfBackground.reindex(
+            columns=["uid",
+                "タイトル字数","タイトル語数","タイトル名詞数",
+                "原稿字数","原稿語数","原稿異なり語数","原稿名詞数","原稿異なり名詞数","原稿文数",
+                "文平均字数","文平均語数","文平均名詞数"
+                ])
+        
         st.session_state.dfBackground = dfBackground
         lastRowRec = docAveRec(dfBackground)
+
     else:
         targetDocRec = st.session_state["statTargetTxt"]
         dfBackground = st.session_state["dfBackground"]

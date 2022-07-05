@@ -145,6 +145,7 @@ def readUploadedFile(fileUploaderForm):
             txt = fr.read()
     
     st.session_state.target_file = txt
+    st.session_state.url = "default file"
     
     return txt
 
@@ -176,22 +177,59 @@ with st.form("uploaderSingleFile", clear_on_submit=True,):
 
 if fileUploaderForm and submitted:
     st.success("ファイルをアップロードしました。")
+    if "url" not in st.session_state:
+        st.session_state.url = ""
+    st.session_state.url = "upload file"
 
 readUploadedFile(fileUploaderForm)
 
 ########## H3 業種選択
+generalKeywords = [
+    "正社員","アルバイト","中高年","主婦パート","土日祝休み",
+    "シニア","ハローワーク","深夜バイト","オープニングスタッフ",
+    "未経験","主婦","パート","短期","大学生","高校生","早朝",
+    "単発","託児所完備",
+    ]
+gyosyuKeywordDict = {
+    "介護":[
+        "介護","ホームヘルパー","介護職員","介護スタッフ",
+        "福祉","生活支援員","デイサービス","訪問介護","グループホーム","介護職",
+        "世話人","社会福祉士","夜勤専従","特別養護老人ホーム","就労支援員",
+        ],
+    "物流":[
+        "物流","輸送",
+        ],
+    "販売":[
+        "販売","アパレル販売","販売スタッフ","ファッション","デザイン",
+        "コラボ","メンズ","レディース","デザイナー","接客","接客販売",
+        "カフェ","パン屋","品出し","スーパー","ドラッグストア","喫茶店",
+        "バリスタ","コーヒー","雑貨販売",
+        ],
+    "営業":[
+        "営業","不動産",
+        ],
+    "飲食":[
+        "飲食","調理補助","キッチンスタッフ","ホール","調理","給食","食堂",
+        "洗い場","飲食店","居酒屋","ベーカリー","パン製造","食品製造",
+        ],
+    "事務":[
+        "事務",
+        ],
+    "マーケティング":[
+        "ecサイト","運営スタッフ","企画営業","広報","企画","商品企画",
+        "ネットショップ","運営","在宅勤務","在宅ワーク","通販",
+        "photoshop","秘書","ラウンダー","商品開発","ものづくり",
+        ]
+    }
 
 st.markdown('<h3 style="text-align: center">業種を選択してください</h4>',unsafe_allow_html=True)
-optionGyosyu = st.selectbox(label="", options=("-","介護","物流","販売","飲食","事務"))
+optionGyosyu = st.selectbox(label="", options=["-"] + list(gyosyuKeywordDict.keys()))
 gyosyuStore = optionGyosyu
 
 if "industry" not in st.session_state:
     st.session_state.industry = "notSelected"
 elif st.session_state != optionGyosyu:
     st.session_state.industry = gyosyuStore
-
-########## タスク選択
-#optionPhase = st.sidebar.selectbox(label="STEP 2: タスク選択",options=("-","関連度計算","原稿推薦表現","原稿生成β"))
 
 def ginzaProcessing(task="singleText",sent1="",sent2=""):
 
@@ -221,7 +259,7 @@ def multiAddDiv(df):
     result3 = sum(df["原稿文数"]*df["文平均名詞数"])/sum(df["原稿文数"])
     return [result1,result2,result3]
 
-def docAveRec(df):
+def pending_docAveRec(df):# なぜかコラムずれる？
 
     dfStatMean = df.mean().tolist()[1:-3]
     dfStatMean4Rec = ["dummy0","dummy1"] + dfStatMean + multiAddDiv(df)
@@ -238,7 +276,7 @@ def forSentence(s):
 
     return [len(s),len(sWakati),len(sNoun)]
 
-def forDescrption(para):
+def forDescription(para):
 
     para = para.strip()
     sentlist = [sent for sent in para.split("\n") if len(sent) > 0]
@@ -268,7 +306,7 @@ def getDeviationValue(df,colName):
 def statTargetDoc(_txtTitle,_txtContent):
 
     statTitle = forSentence(_txtTitle)
-    statContent = forDescrption(_txtContent)
+    statContent = forDescription(_txtContent)
     record = ["dummy0","dummy1",*statTitle,*statContent]
 
     st.session_state.statTargetTxt = record
@@ -323,36 +361,6 @@ def radar_chart(dataRadarChart,categoryRadarChart):
     
     return fig
 
-#################### 基礎統計セクション
-##### page 2 migrated
-generalKeywords = [
-    "正社員","アルバイト","中高年","主婦パート","土日祝休み",
-    "シニア","ハローワーク","深夜バイト","オープニングスタッフ",
-    ]
-
-gyosyuKeywordDict = {
-    "介護":[
-        "介護","ホームヘルパー","介護職員","介護スタッフ",
-        "福祉","生活支援員","デイサービス","訪問介護","グループホーム","介護職",
-        "世話人","社会福祉士","夜勤専従","特別養護老人ホーム","就労支援員",
-        ],
-    "物流":[
-        "物流","輸送",
-        ],
-    "販売":[
-        "販売","アパレル販売","販売スタッフ",
-        ],
-    "営業":[
-        "営業","不動産",
-        ],
-    "飲食":[
-        "飲食",
-        ],
-    "事務":[
-        "事務",
-        ],
-    }
-
 def getSimValue(dic4store,kwlist,targetTitle,targetDoc):
     dic4store["職種"].append()
     for kw in kwlist:
@@ -376,16 +384,3 @@ def loadCorpusHP(corpath):
     kaigoSponsorSentSet = [noSymbolic(e.strip()) for e in set(kaigoSponsorSentList) if len(e) > 0]
     kaigoSponsorSentSet = list(set(kaigoSponsorSentSet))
     return list(range(1000))
-
-
-
-def crawling4SpecificSite(targetUrl,site):
-    if site == "zensyo":
-        # bs4 + requests
-        pass
-    elif site == "リクオプ":
-        pass
-    elif site == "ジョブオプ":
-        pass
-    elif site == "AirWork":
-        pass
