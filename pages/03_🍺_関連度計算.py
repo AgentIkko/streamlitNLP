@@ -24,7 +24,7 @@ def kwInTargetFile(_content):
     return kwInContent
 
 def getDeviationValue(dfCol):
-    seriesCal = dfCol
+    seriesCal = dfCol.dropna()
     seriesCal_std = seriesCal.std(ddof=0)
     seriesCal_mean = seriesCal.mean()
     result = seriesCal.map(lambda x: round((x - seriesCal_mean) / seriesCal_std * 10 +50)).astype(int).tolist()
@@ -187,6 +187,11 @@ for kw in candidateKeyWord:
 
     try:
         rankingDoc = prevSimScore4Doc[kw].tolist()
+        clearedContent = dfSpecificField["jobContentCleared"]
+        try:
+            contraContentsKW = clearedContent.apply(eval).tolist()
+        except TypeError:
+            contraContentsKW = clearedContent.tolist()
 
     except KeyError:
 
@@ -196,7 +201,11 @@ for kw in candidateKeyWord:
         else:
             contraUID = dfSpecificField["uid"].tolist()
             contraTitlesKW = dfSpecificField["jobTitle"].tolist()
-            contraContentsKW = dfSpecificField["jobContentCleared"].apply(eval).tolist()
+            clearedContent = dfSpecificField["jobContentCleared"]
+            try:
+                contraContentsKW = clearedContent.apply(eval).tolist()
+            except TypeError:
+                contraContentsKW = clearedContent.tolist()
 
             prevSimScore4DocUpdate = pd.DataFrame(columns=["uid",kw])
             prevSimScore4DocUpdate["uid"] = dfSpecificField["uid"]
@@ -241,25 +250,81 @@ for kw in candidateKeyWord:
     )["cosine_similarity"]
 
     rankingDoc.append(docSimScore)
+    rankingDoc = pd.Series(rankingDoc).dropna()
 
-    sss = pd.Series(rankingDoc).rank(
+    sss = rankingDoc.rank(
         ascending=True,
         pct=True).tolist()[-1] # targetを取ってきてるので tail
-    sssDV = getDeviationValue(pd.Series(rankingDoc))[-1]
+    sssDV = getDeviationValue(rankingDoc)[-1]
 
     expanderLabel = f"【{kw}】偏差値：{int(sssDV)}；順位：{round(sss*100,2)} %"
 
-    sortedsim4EntData = prevSimScore4Entity.sort_values(
-        by = kw, ascending = False,)
-    entCandidate = sortedsim4EntData.index.values
-    entDisplay = [e.strip() for e in entCandidate if (e not in kwInTarget) and (kw not in e)]
-    # entDisplay = [e for e in entDisplay if kw not in e]
+    ### keyword part
+    # termlists = []
+    # for content in contraContentsKW:
+    #     termlist = ginzaProcessing(task = "singleText",sent1 = "\n".join(content))
+    #     sNoun = [e[0].strip() for e in termlist["info"] if e[1].startswith("名詞")]
+    #     termlists.extend(sNoun)
+    # mostTerms = [e[0] for e in Counter(termlists).most_common() if (e[0] not in kwInTarget) and (kw not in e[0])]
+
+    try:
+        if prevSimScore4Entity[kw].max() == 0:
+            termlists = []
+            for content in contraContentsKW:
+                termlist = ginzaProcessing(task = "singleText",sent1 = "\n".join(content))
+                sNoun = [e[0].strip() for e in termlist["info"] if e[1].startswith("名詞")]
+                termlists.extend(sNoun)
+            entDisplay = [e[0] for e in Counter(termlists).most_common() if (e[0] not in kwInTarget) and (kw not in e[0])]
+        else:
+            sortedsim4EntData = prevSimScore4Entity.sort_values(by = kw, ascending = False,)
+            entCandidate = sortedsim4EntData.index.values
+            entDisplay = [e.strip() for e in entCandidate if (e not in kwInTarget) and (kw not in e)]
+
+    except KeyError:
+        st.info("データベースにないため、キーワード関連度計算中…")
+        top18kterm = prevSimScore4Entity.index.values
+        newScore4NewKW = []
+
+        for term in top18kterm:
+
+            if (len(newScore4NewKW)) > 20 and (max([e[1] for e in newScore4NewKW]) == 0):
+                break
+
+            term = term.strip()
+            if (term not in kwInTarget) and (kw not in term):
+
+                pairwiseSimScore = ginzaProcessing(
+                    task = "pairText",
+                    sent1 = kw,
+                    sent2 = term,
+                )["cosine_similarity"]
+
+                decimalScore = Decimal(str(pairwiseSimScore))
+                newScore4NewKW.append([term,decimalScore])
+
+                options = {
+                    "Key"                       :   {"Entity"  :   term},
+                    "UpdateExpression"          :   "set #kw = :kw",
+                    "ExpressionAttributeNames"  :   {"#kw"  :   kw},
+                    "ExpressionAttributeValues" :   {":kw"  :   decimalScore},
+                }
+                dynoTableRead2.update_item(**options)
+
+        if max([e[1] for e in newScore4NewKW]) == 0:
+            termlists = []
+            for content in contraContentsKW:
+                termlist = ginzaProcessing(task = "singleText",sent1 = "\n".join(content))
+                sNoun = [e[0].strip() for e in termlist["info"] if e[1].startswith("名詞")]
+                termlists.extend(sNoun)
+            entDisplay = [e[0] for e in Counter(termlists).most_common() if (e[0] not in kwInTarget) and (kw not in e[0])]
+        else:
+            entCandidate = sorted(newScore4NewKW,key=lambda x:x[1],reverse=True)
+            entDisplay = [e[0] for e in entCandidate]
 
     st.session_state["phase2TopEnt"][kw] = entDisplay[:256]
 
-
     styledStr = "<p style='text-align:center;line-height:2.5;'>"
-    for ent in entDisplay[:101]:
+    for ent in entDisplay[:151]:
         styledStr += f"<span class='strblockBlue'>{ent}</span>"
     styledStr += "</p><hr>"
     with st.expander(expanderLabel):

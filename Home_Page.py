@@ -13,7 +13,7 @@ import plotly.express as px
 
 #################### html wrapper & page config
 session = Session(profile_name="genikko-profile")
-client = session.client("sagemaker-runtime",region_name="ap-northeast-1")
+# client = session.client("sagemaker-runtime",region_name="ap-northeast-1")
 clientLambda = session.client("lambda",region_name="ap-northeast-1")
 
 HTML_WRAPPER = """<div style="overflow-x: auto; border: 1px solid #e6e9ef; border-radius: 0.25rem; padding: 1rem">{}</div>"""
@@ -219,7 +219,17 @@ gyosyuKeywordDict = {
         "ecサイト","運営スタッフ","企画営業","広報","企画","商品企画",
         "ネットショップ","運営","在宅勤務","在宅ワーク","通販",
         "photoshop","秘書","ラウンダー","商品開発","ものづくり",
-        ]
+        ],
+    "会社特化_東レ":[
+        "生産管理","OEM","生産管理 アパレル","OEM アパレル",
+        "ecサイト運営","ネットショップ","ecサイト運営 アパレル","ネットショップ アパレル",
+        "マーチャンダイザー アパレル","MD アパレル","バイヤー アパレル","企画 アパレル",
+        "OEM営業","OEM営業 アパレル","ファッション 営業","繊維 営業",
+        "PhotoShop","デザイナー","PhotoShop アパレル","デザイナー アパレル",        
+        ],
+    "会社特化_クロサワ":[
+
+        ],
     }
 
 st.markdown('<h3 style="text-align: center">業種を選択してください</h4>',unsafe_allow_html=True)

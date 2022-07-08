@@ -69,14 +69,14 @@ phase3kwSelect = st.radio(
     horizontal=True,
     )
 
-phase3Candidate = st.session_state["phase2TopEnt"][phase3kwSelect][:51]
+phase3Candidate = st.session_state["phase2TopEnt"][phase3kwSelect][:150]
 
 with st.form("phase3"):
 
     phase3Form = st.multiselect(
         label="これらの関連キーワードでよろしいですか",
         options = phase3Candidate,
-        default = phase3Candidate[:10],
+        default = phase3Candidate[:20],
         help = "使い方説明施工中",
     )
     phase3ConfirmButton = st.form_submit_button("関連語確定")
@@ -106,7 +106,7 @@ if phase3ConfirmButton:
             with st.expander(f"{t}を含む表現"):
 
                 para4Display = ""
-                for s in para4ListSorted[:51]:
+                for s in para4ListSorted[:100]:
                     sent4Display = f"<div class='parblock'>{s}</div><p></p>"
                     para4Display += sent4Display
             

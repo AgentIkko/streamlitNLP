@@ -48,6 +48,10 @@ funStaContainer.markdown("""
 
 
 ########## いろいろなデータをロードするパート
+if ("industry" not in st.session_state) or (st.session_state.industry == "-") or (st.session_state.industry == "notSelected"):
+    st.error("業種を選択してください。")
+    st.stop()
+
 with st.spinner("対象原稿解析中..."):
 
     #if "phase1DataLoaded" not in st.session_state:
@@ -55,6 +59,8 @@ with st.spinner("対象原稿解析中..."):
     if ("statTargetTxt" not in st.session_state) or (st.session_state["statTargetTxt"] == "fileChanged"):
         try:
             targetTitle, targetContent = titleContent(st.session_state.target_file)
+            st.session_state["targetTitle"] = targetTitle
+            st.session_state["targetContent"] = targetContent
         except AttributeError:
             st.error("ファイルをアップロードしてください。")
             st.stop()
@@ -99,8 +105,6 @@ with st.spinner("上位原稿群解析中..."):
         dfBackground = st.session_state["dfBackground"]
         lastRowRec = st.session_state["statBackgroundAvg"]
 
-st.success("処理完了🎈")
-
 ########## phase 1 part 1 統計データ表示パート
 with funStaContainer:
 
@@ -108,10 +112,14 @@ with funStaContainer:
     indexRange2 = [5,6,7,8,9,10]
     labelRange = ["dummy1","dummy2","職種字数","職種語数","職種名詞数","原稿字数","原稿語数","原稿語数(異)","原稿名詞数","原稿名詞数(異)","原稿文数","文平均字数","文平均語数","文平均名詞数"]
     
-    st.markdown(str_block_css,unsafe_allow_html=True)
-    st.markdown(f"""
-        <p>対象原稿職種：<span class="strblockGray">{targetTitle}</span></p>
-        """, unsafe_allow_html=True,)
+    try:
+        st.markdown(str_block_css,unsafe_allow_html=True)
+        st.markdown(f"""
+            <p>対象原稿職種：<span class="strblockGray">{st.session_state["targetTitle"]}</span></p>
+            """, unsafe_allow_html=True,)
+    except KeyError:
+        st.info("原稿をアップロードしてください。")
+        st.stop()
     for (i,col) in zip(indexRange1,st.columns(6)):
         targetNum = np.round(targetDocRec[i],decimals=1)
         deltaNum = np.round(targetDocRec[i]-lastRowRec[i],decimals=1)
@@ -119,7 +127,7 @@ with funStaContainer:
 
     st.markdown(str_block_css,unsafe_allow_html=True)
     st.markdown(f"""
-        <p>対象原稿内容：<span class="strblockGray">{targetContent[:25]}（以下略）</span></p>
+        <p>対象原稿内容：<span class="strblockGray">{st.session_state["targetContent"][:25]}（以下略）</span></p>
         """, unsafe_allow_html=True,)
     for (i,col) in zip(indexRange2,st.columns(6)):
         targetNum = np.round(targetDocRec[i],decimals=1)
