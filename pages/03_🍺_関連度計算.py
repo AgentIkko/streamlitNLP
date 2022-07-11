@@ -2,11 +2,11 @@ from io import StringIO
 from PIL import Image
 from collections import Counter
 import re, os, glob, copy, random, pickle, itertools,json
-import ginza, spacy
 import streamlit as st
 import pandas as pd
 import numpy as np
 import boto3
+import ginza,spacy
 from boto3.session import Session
 from Home_Page import *
 from boto3.dynamodb.conditions import Attr,Key
@@ -27,7 +27,8 @@ def getDeviationValue(dfCol):
     seriesCal = dfCol.dropna()
     seriesCal_std = seriesCal.std(ddof=0)
     seriesCal_mean = seriesCal.mean()
-    result = seriesCal.map(lambda x: round((x - seriesCal_mean) / seriesCal_std * 10 +50)).astype(int).tolist()
+    result = seriesCal.map(lambda x: round((x - seriesCal_mean) / seriesCal_std * 10 +50)).dropna().astype(int).tolist()
+
     return result
 
 ########################################
@@ -216,11 +217,15 @@ for kw in candidateKeyWord:
 
             for barI,(u,t,c) in enumerate(zip(contraUID,contraTitlesKW,contraContentsKW)):
 
-                docSimScoreContra = ginzaProcessing(
-                    task = "pairText",
-                    sent1 = kw,
-                    sent2 = "\n".join(c),
-                )["cosine_similarity"]
+                try:
+                    docSimScoreContra = ginzaProcessing(
+                        task = "pairText",
+                        sent1 = kw,
+                        sent2 = "\n".join(c),
+                    )["cosine_similarity"]
+                except KeyError:
+                    docSimScoreContra = 0
+                    st.write(f"{t} no score")
 
                 prevSimScore4DocUpdate.loc[prevSimScore4DocUpdate["uid"]==u,kw] = docSimScoreContra
 
@@ -282,12 +287,14 @@ for kw in candidateKeyWord:
 
     except KeyError:
         st.info("データベースにないため、キーワード関連度計算中…")
-        top18kterm = prevSimScore4Entity.index.values
         newScore4NewKW = []
 
+        """ 計算時間かかりすぎるので、一旦コメントアウト
+
+        top18kterm = prevSimScore4Entity.index.values
         for term in top18kterm:
 
-            if (len(newScore4NewKW)) > 20 and (max([e[1] for e in newScore4NewKW]) == 0):
+            if (len(newScore4NewKW) == 20) and (max([e[1] for e in newScore4NewKW]) == 0):
                 break
 
             term = term.strip()
@@ -310,16 +317,41 @@ for kw in candidateKeyWord:
                 }
                 dynoTableRead2.update_item(**options)
 
-        if max([e[1] for e in newScore4NewKW]) == 0:
-            termlists = []
-            for content in contraContentsKW:
-                termlist = ginzaProcessing(task = "singleText",sent1 = "\n".join(content))
-                sNoun = [e[0].strip() for e in termlist["info"] if e[1].startswith("名詞")]
-                termlists.extend(sNoun)
-            entDisplay = [e[0] for e in Counter(termlists).most_common() if (e[0] not in kwInTarget) and (kw not in e[0])]
-        else:
-            entCandidate = sorted(newScore4NewKW,key=lambda x:x[1],reverse=True)
-            entDisplay = [e[0] for e in entCandidate]
+        """
+
+        # if max([e[1] for e in newScore4NewKW]) == 0:
+        termlists = []
+        for content in contraContentsKW:
+            termlist = ginzaProcessing(task = "singleText",sent1 = "\n".join(content))
+            sNoun = [e[0].strip() for e in termlist["info"] if e[1].startswith("名詞")]
+            sNoun = [e for e in sNoun if (e not in kwInTarget) and (kw not in e)]
+            termlists.extend(sNoun)
+        interPhase = [e[0] for e in Counter(termlists).most_common(1000)]
+        st.info("キーワード選定終了（仮）")
+
+        for t in interPhase:
+
+            pairwiseSimScore = ginzaProcessing(
+                    task = "pairText",
+                    sent1 = kw,
+                    sent2 = t,
+                )["cosine_similarity"]
+
+            decimalScore = Decimal(str(pairwiseSimScore))
+            newScore4NewKW.append([t,decimalScore])
+
+            options = {
+                    "Key"                       :   {"Entity"  :   t},
+                    "UpdateExpression"          :   "set #kw = :kw",
+                    "ExpressionAttributeNames"  :   {"#kw"  :   kw},
+                    "ExpressionAttributeValues" :   {":kw"  :   decimalScore},
+                }
+            dynoTableRead2.update_item(**options)
+        st.info("計算終了（仮）")
+
+        # else:
+        entCandidate = sorted(newScore4NewKW,key=lambda x:x[1],reverse=True)
+        entDisplay = [e[0] for e in entCandidate]
 
     st.session_state["phase2TopEnt"][kw] = entDisplay[:256]
 
